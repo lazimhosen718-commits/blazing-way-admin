@@ -1,0 +1,195 @@
+
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BLAZING-WAY Passenger Login</title>
+
+<style>
+*{box-sizing:border-box}
+body{
+ margin:0;
+ font-family:Arial,sans-serif;
+ background:#eef2f7;
+ color:#172554;
+}
+header{
+ background:#123b70;
+ color:white;
+ text-align:center;
+ padding:22px;
+}
+main{
+ max-width:480px;
+ margin:25px auto;
+ padding:15px;
+}
+.card{
+ background:white;
+ padding:22px;
+ border-radius:12px;
+ box-shadow:0 3px 12px #ddd;
+}
+input{
+ width:100%;
+ padding:14px;
+ margin:9px 0;
+ border:1px solid #ccc;
+ border-radius:7px;
+ font-size:16px;
+}
+button{
+ width:100%;
+ padding:14px;
+ margin-top:12px;
+ background:#123b70;
+ color:white;
+ border:0;
+ border-radius:7px;
+ font-size:16px;
+ cursor:pointer;
+}
+button:disabled{opacity:.5}
+#message{
+ overflow-wrap:anywhere;
+ font-weight:bold;
+}
+a{color:#123b70}
+</style>
+</head>
+
+<body>
+
+<header>
+<h1>BLAZING-WAY</h1>
+<p>Passenger Login</p>
+</header>
+
+<main>
+<div class="card">
+
+<h2>যাত্রী অ্যাকাউন্টে Login করুন</h2>
+
+<form id="loginForm">
+
+<input id="email" type="email"
+placeholder="আপনার Gmail" required>
+
+<input id="password" type="password"
+placeholder="আপনার Password" required>
+
+<button id="loginBtn" type="submit">
+Passenger Login
+</button>
+
+</form>
+
+<p id="message"></p>
+
+<p>নতুন অ্যাকাউন্ট খুলতে
+<a href="passenger-register.html">Registration করুন</a>
+</p>
+
+</div>
+</main>
+
+<script type="module">
+
+import {initializeApp}
+from "https://www.gstatic.com/firebasejs/12.0.0/firebase-app.js";
+
+import {
+getAuth,
+signInWithEmailAndPassword
+} from "https://www.gstatic.com/firebasejs/12.0.0/firebase-auth.js";
+
+import {
+getFirestore,
+doc,
+getDoc
+} from "https://www.gstatic.com/firebasejs/12.0.0/firebase-firestore.js";
+
+const app=initializeApp({
+apiKey:"AIzaSyBVzdXw-nO8ixDqxbGhTj3lbBX37XUMCr4",
+authDomain:"blazing-way.firebaseapp.com",
+projectId:"blazing-way",
+storageBucket:"blazing-way.firebasestorage.app",
+messagingSenderId:"100523779075",
+appId:"1:100523779075:web:732df54a1b0565f02e1a36",
+measurementId:"G-9V8GMD28ST"
+});
+
+const auth=getAuth(app);
+const db=getFirestore(app);
+
+const form=document.getElementById("loginForm");
+const message=document.getElementById("message");
+const button=document.getElementById("loginBtn");
+
+form.addEventListener("submit",async(e)=>{
+
+e.preventDefault();
+message.textContent="";
+
+const email=document.getElementById("email").value.trim();
+const password=document.getElementById("password").value;
+
+button.disabled=true;
+button.textContent="Login হচ্ছে...";
+
+try{
+
+const result=await signInWithEmailAndPassword(
+auth,email,password
+);
+
+const user=result.user;
+
+const profileRef=doc(db,"passengerProfiles",user.uid);
+const profileSnap=await getDoc(profileRef);
+
+if(!profileSnap.exists() ||
+profileSnap.data().role!=="passenger"){
+
+await auth.signOut();
+
+throw new Error("not-passenger");
+}
+
+message.style.color="green";
+message.textContent="Passenger Login সফল হয়েছে!";
+
+}catch(error){
+
+console.error("Passenger Login Error:",error);
+
+message.style.color="#b42318";
+
+const errors={
+"auth/invalid-credential":"Gmail অথবা Password ভুল।",
+"auth/user-not-found":"এই Gmail দিয়ে অ্যাকাউন্ট পাওয়া যায়নি।",
+"auth/wrong-password":"Password ভুল হয়েছে।",
+"auth/invalid-email":"Gmail ঠিক নয়।",
+"auth/network-request-failed":"ইন্টারনেট সংযোগ পরীক্ষা করুন।",
+"not-passenger":"এই অ্যাকাউন্টটি Passenger অ্যাকাউন্ট নয়।"
+};
+
+message.textContent=
+errors[error.message] ||
+errors[error.code] ||
+"সমস্যা হয়েছে: "+error.code;
+
+}finally{
+
+button.disabled=false;
+button.textContent="Passenger Login";
+
+}
+
+});
+
+</script>
+
+</body>
+</html>
