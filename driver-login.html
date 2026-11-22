@@ -13,10 +13,13 @@ main{max-width:500px;margin:25px auto;padding:15px}
 .card{background:white;padding:22px;border-radius:12px;box-shadow:0 3px 12px #ddd}
 input{width:100%;padding:13px;margin:10px 0;border:1px solid #ccc;border-radius:7px}
 button{background:#123b70;color:white;border:0;padding:13px;border-radius:7px;width:100%;margin-top:12px}
+button:disabled{opacity:.5}
 #result{margin-top:18px;line-height:1.7;overflow-wrap:anywhere}
 .approved{color:green;font-weight:bold}
 .pending{color:#a15c00;font-weight:bold}
 .rejected{color:#b42318;font-weight:bold}
+.online{color:green;font-weight:bold}
+.offline{color:#b42318;font-weight:bold}
 a{color:#123b70}
 </style>
 </head>
@@ -42,6 +45,8 @@ a{color:#123b70}
 </form>
 
 <div id="result"></div>
+
+<button id="onlineBtn" hidden>Online হোন</button>
 <button id="logoutBtn" hidden>Logout</button>
 
 <p><a href="driver-register.html">নতুন চালক নিবন্ধন</a></p>
@@ -62,7 +67,10 @@ signOut
 import {
 getFirestore,
 doc,
-getDoc
+getDoc,
+setDoc,
+updateDoc,
+serverTimestamp
 } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-firestore.js";
 
 const app=initializeApp({
@@ -81,83 +89,156 @@ const form=document.getElementById("loginForm");
 const result=document.getElementById("result");
 const loginBtn=document.getElementById("loginBtn");
 const logoutBtn=document.getElementById("logoutBtn");
+const onlineBtn=document.getElementById("onlineBtn");
+
+let currentDriver=null;
+let currentOnline=false;
+let busy=false;
+
+function showMessage(text,className=""){
+result.replaceChildren();
+const p=document.createElement("p");
+p.className=className;
+p.textContent=text;
+result.appendChild(p);
+}
 
 async function checkDriver(user){
 
+currentDriver=null;
 form.hidden=true;
 logoutBtn.hidden=false;
-result.textContent="আবেদনের অবস্থা যাচাই হচ্ছে...";
+onlineBtn.hidden=true;
+
+showMessage("আবেদনের অবস্থা যাচাই হচ্ছে...");
 
 try{
 
-const ref=doc(db,"driverApplications",user.uid);
-const snap=await getDoc(ref);
+const applicationRef=doc(db,"driverApplications",user.uid);
+const applicationSnap=await getDoc(applicationRef);
 
-if(!snap.exists()){
-result.textContent="এই অ্যাকাউন্টে চালকের আবেদন পাওয়া যায়নি।";
+if(!applicationSnap.exists()){
+showMessage("এই অ্যাকাউন্টে চালকের আবেদন পাওয়া যায়নি।");
 return;
 }
 
-const data=snap.data();
+const data=applicationSnap.data();
 
-if(data.status==="approved"){
+if(data.status==="pending"){
+showMessage("আপনার আবেদন এখনো Pending। Admin অনুমোদনের জন্য অপেক্ষা করুন।","pending");
+return;
+}
 
-result.innerHTML="";
+if(data.status==="rejected"){
+showMessage("আপনার আবেদন অনুমোদিত হয়নি। Admin-এর সঙ্গে যোগাযোগ করুন।","rejected");
+return;
+}
+
+if(data.status!=="approved"){
+showMessage("আবেদনের অবস্থা সঠিক নয়। Admin-এর সঙ্গে যোগাযোগ করুন।");
+return;
+}
+
+currentDriver=user;
+
+const presenceRef=doc(db,"driverPresence",user.uid);
+const presenceSnap=await getDoc(presenceRef);
+
+currentOnline=presenceSnap.exists()
+&& presenceSnap.data().online===true;
+
 const title=document.createElement("h3");
 title.className="approved";
 title.textContent="আপনার আবেদন অনুমোদিত হয়েছে!";
 
 const info=document.createElement("p");
-info.textContent="স্বাগতম, "+(data.fullName || "চালক")+"। আপনার গাড়ির ধরন: "+
-(data.vehicleType==="bike" ? "Bike" : "Private Car");
+info.textContent="স্বাগতম, "+(data.fullName || "চালক")+
+"। গাড়ির ধরন: "+(data.vehicleType==="bike"?"Bike":"Private Car");
 
-const next=document.createElement("p");
-next.textContent="আপনি অনুমোদিত চালক। রাইড গ্রহণের ব্যবস্থা এখনো তৈরি হচ্ছে।";
+result.replaceChildren(title,info);
 
-result.append(title,info,next);
-
-}else if(data.status==="pending"){
-
-result.innerHTML="";
-const status=document.createElement("h3");
-status.className="pending";
-status.textContent="আপনার আবেদন এখনো Pending।";
-
-const info=document.createElement("p");
-info.textContent="Admin অনুমোদন না দেওয়া পর্যন্ত আপনি রাইড নিতে পারবেন না।";
-
-result.append(status,info);
-
-}else if(data.status==="rejected"){
-
-result.innerHTML="";
-const status=document.createElement("h3");
-status.className="rejected";
-status.textContent="আপনার আবেদন অনুমোদিত হয়নি।";
-
-const info=document.createElement("p");
-info.textContent="বিস্তারিত জানতে Admin-এর সঙ্গে যোগাযোগ করুন।";
-
-result.append(status,info);
-
-}else{
-
-result.textContent="আবেদনের অবস্থা পাওয়া যায়নি। Admin-এর সঙ্গে যোগাযোগ করুন।";
-
-}
+onlineBtn.hidden=false;
+updateOnlineDisplay();
 
 }catch(error){
 
 console.error(error);
-result.textContent="আবেদনের অবস্থা যাচাই করা যায়নি। আবার চেষ্টা করুন।";
+currentDriver=null;
+onlineBtn.hidden=true;
+showMessage("আবেদনের অবস্থা যাচাই করা যায়নি। আবার চেষ্টা করুন।");
 
 }
 
 }
+
+function updateOnlineDisplay(){
+
+if(currentOnline){
+
+showMessage("আপনি এখন ONLINE আছেন।","online");
+onlineBtn.textContent="Offline হোন";
+
+}else{
+
+showMessage("আপনি এখন OFFLINE আছেন।","offline");
+onlineBtn.textContent="Online হোন";
+
+}
+
+}
+
+onlineBtn.onclick=async()=>{
+
+if(!currentDriver || busy)return;
+
+busy=true;
+onlineBtn.disabled=true;
+
+try{
+
+const ref=doc(db,"driverPresence",currentDriver.uid);
+const snap=await getDoc(ref);
+
+const newStatus=!currentOnline;
+
+if(snap.exists()){
+
+await updateDoc(ref,{
+online:newStatus,
+updatedAt:serverTimestamp()
+});
+
+}else{
+
+await setDoc(ref,{
+uid:currentDriver.uid,
+online:newStatus,
+updatedAt:serverTimestamp()
+});
+
+}
+
+currentOnline=newStatus;
+updateOnlineDisplay();
+
+}catch(error){
+
+console.error(error);
+showMessage("Status পরিবর্তন করা যায়নি। Firebase Rules পরীক্ষা করুন।");
+
+}finally{
+
+busy=false;
+onlineBtn.disabled=false;
+
+}
+
+};
 
 form.addEventListener("submit",async(event)=>{
 
 event.preventDefault();
+
 result.textContent="";
 loginBtn.disabled=true;
 
@@ -175,7 +256,7 @@ await checkDriver(credential.user);
 }catch(error){
 
 console.error(error);
-result.textContent="Login হয়নি। Gmail ও Password পরীক্ষা করুন।";
+showMessage("Login হয়নি। Gmail ও Password পরীক্ষা করুন।");
 
 }finally{
 
@@ -188,9 +269,14 @@ loginBtn.disabled=false;
 onAuthStateChanged(auth,user=>{
 
 if(!user){
+
+currentDriver=null;
+currentOnline=false;
 form.hidden=false;
 logoutBtn.hidden=true;
+onlineBtn.hidden=true;
 result.textContent="";
+
 }
 
 });
