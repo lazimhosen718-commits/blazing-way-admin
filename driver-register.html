@@ -1,0 +1,51 @@
+
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BLAZING-WAY Driver Registration</title>
+<style>
+body{font-family:Arial;background:#eef2f7;margin:0;color:#172554}
+header{background:#123b70;color:white;text-align:center;padding:20px}
+main{max-width:550px;margin:25px auto;padding:15px}
+.card{background:white;padding:22px;border-radius:12px;box-shadow:0 3px 12px #ddd}
+input,select{width:100%;padding:13px;margin:10px 0;border:1px solid #ccc;border-radius:7px;box-sizing:border-box}
+button{background:#123b70;color:white;border:0;padding:13px;border-radius:7px;width:100%;margin-top:12px}
+</style>
+</head>
+<body>
+<header>
+<h1>BLAZING-WAY</h1>
+<p>Driver Registration</p>
+</header>
+<main>
+<div class="card">
+<h2>চালক নিবন্ধন</h2>
+<form id="driverForm">
+<label>পূর্ণ নাম</label>
+<input type="text" placeholder="আপনার নাম" required>
+
+<label>Gmail</label>
+<input type="email" placeholder="আপনার Gmail" required>
+
+<label>Password</label>
+<input type="password" placeholder="কমপক্ষে ৬ অক্ষর" minlength="6" required>
+
+<label>মোবাইল নম্বর</label>
+<input type="tel" placeholder="01XXXXXXXXX" required>
+
+<label>গাড়ির ধরন</label>
+<select required>
+<option value="">নির্বাচন করুন</option>
+<option value="bike">Bike</option>
+<option value="car">Private Car</option>
+</select>
+
+<button type="button" disabled>আবেদন জমা (ডেটাবেস সংযোগ বাকি)</button>
+<p>আবেদন জমা দেওয়ার ব্যবস্থা এখনো প্রস্তুত নয়।</p>
+</form>
+</div>
+</main>
+</body>
+</html>
