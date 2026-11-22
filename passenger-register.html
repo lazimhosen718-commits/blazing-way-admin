@@ -5,6 +5,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>BLAZING-WAY Passenger Registration</title>
+
 <style>
 *{box-sizing:border-box}
 body{
@@ -57,6 +58,7 @@ button:disabled{opacity:.5}
 a{color:#123b70}
 </style>
 </head>
+
 <body>
 
 <header>
@@ -69,6 +71,7 @@ a{color:#123b70}
 <h2>যাত্রী অ্যাকাউন্ট খুলুন</h2>
 
 <form id="registerForm">
+
 <input id="fullName" type="text"
 placeholder="আপনার সম্পূর্ণ নাম" required>
 
@@ -90,6 +93,7 @@ minlength="6" required>
 <button id="registerBtn" type="submit">
 Create Passenger Account
 </button>
+
 </form>
 
 <p id="message"></p>
@@ -97,10 +101,12 @@ Create Passenger Account
 <p>আগে অ্যাকাউন্ট থাকলে
 <a href="passenger-login.html">Login করুন</a>
 </p>
+
 </div>
 </main>
 
 <script type="module">
+
 import {initializeApp}
 from "https://www.gstatic.com/firebasejs/12.0.0/firebase-app.js";
 
@@ -118,7 +124,7 @@ serverTimestamp
 } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-firestore.js";
 
 const app=initializeApp({
-apiKey:"AIzaSyAV6za_TROkL0LszdEPIWbMfRh00NR21KE",
+apiKey:"AIzaSyBVzdXw-nO8ixDqxbGhTj3lbBX37XUMCr4",
 authDomain:"blazing-way.firebaseapp.com",
 projectId:"blazing-way",
 storageBucket:"blazing-way.firebasestorage.app",
@@ -135,6 +141,7 @@ const message=document.getElementById("message");
 const button=document.getElementById("registerBtn");
 
 form.addEventListener("submit",async(e)=>{
+
 e.preventDefault();
 message.textContent="";
 
@@ -155,6 +162,7 @@ button.textContent="অ্যাকাউন্ট তৈরি হচ্ছে.
 let userCreated=false;
 
 try{
+
 const result=await createUserWithEmailAndPassword(
 auth,email,password
 );
@@ -179,28 +187,38 @@ message.textContent="অ্যাকাউন্ট সফলভাবে তৈ
 form.reset();
 
 }catch(error){
+
 console.error("Passenger Registration Error:",error);
 message.style.color="#b42318";
 
 if(userCreated){
+
 message.textContent=
 "অ্যাকাউন্ট তৈরি হয়েছে, কিন্তু প্রোফাইল সংরক্ষণ হয়নি। Admin-কে জানান।";
+
 }else{
+
 const errors={
 "auth/email-already-in-use":"এই Gmail দিয়ে আগে অ্যাকাউন্ট খোলা হয়েছে।",
 "auth/invalid-email":"Gmail ঠিক নয়।",
 "auth/weak-password":"আরও শক্তিশালী Password দিন।",
 "auth/network-request-failed":"ইন্টারনেট সংযোগ পরীক্ষা করুন।"
 };
+
 message.textContent=
 errors[error.code]||"সমস্যা হয়েছে: "+error.code;
+
 }
 
 }finally{
+
 button.disabled=false;
 button.textContent="Create Passenger Account";
+
 }
+
 });
+
 </script>
 
 </body>
