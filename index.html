@@ -29,10 +29,12 @@ button:disabled{opacity:.5}
 </style>
 </head>
 <body>
+
 <header>
 <h1>BLAZING-WAY</h1>
 <p>Admin Control Center</p>
 </header>
+
 <main>
 <div class="card" id="login">
 <h2>Admin Login</h2>
@@ -55,16 +57,19 @@ button:disabled{opacity:.5}
 <p>চালকদের আবেদন ব্যবস্থাপনা</p>
 <p class="status" id="driverCount">আবেদন লোড হচ্ছে...</p>
 </div>
+
 <div class="card">
 <h3>Passenger Management</h3>
 <p>যাত্রীদের তথ্য ব্যবস্থাপনা</p>
 <p class="status">ডেটাবেস সংযোগ বাকি</p>
 </div>
+
 <div class="card">
 <h3>Ride Monitoring</h3>
 <p>বাইক ও প্রাইভেট কারের রাইড</p>
 <p class="status">ডেটাবেস সংযোগ বাকি</p>
 </div>
+
 <div class="card">
 <h3>Commission</h3>
 <p>প্রতি রাইডে Admin Commission: ৫%</p>
@@ -90,13 +95,23 @@ button:disabled{opacity:.5}
 import {initializeApp} from "https://www.gstatic.com/firebasejs/12.0.0/firebase-app.js";
 
 import {
-getAuth,onAuthStateChanged,signInWithEmailAndPassword,
-signOut,getIdTokenResult
+getAuth,
+onAuthStateChanged,
+signInWithEmailAndPassword,
+signOut,
+getIdTokenResult
 } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-auth.js";
 
 import {
-getFirestore,collection,onSnapshot,doc,updateDoc,serverTimestamp,
-query,where,getDoc
+getFirestore,
+collection,
+onSnapshot,
+doc,
+updateDoc,
+serverTimestamp,
+query,
+where,
+getDoc
 } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-firestore.js";
 
 const app=initializeApp({
@@ -123,6 +138,7 @@ let stopPresence=null;
 
 document.getElementById("loginBtn").onclick=async()=>{
 message.textContent="";
+
 try{
 await signInWithEmailAndPassword(
 auth,
@@ -130,13 +146,21 @@ document.getElementById("email").value.trim(),
 document.getElementById("password").value
 );
 }catch(e){
-message.textContent="Login হয়নি। Email ও Password পরীক্ষা করুন।";
+console.error("Firebase Login Error:",e);
+message.textContent="Login Error: "+e.code;
 }
 };
 
 onAuthStateChanged(auth,async user=>{
-if(stopApplications){stopApplications();stopApplications=null;}
-if(stopPresence){stopPresence();stopPresence=null;}
+if(stopApplications){
+stopApplications();
+stopApplications=null;
+}
+
+if(stopPresence){
+stopPresence();
+stopPresence=null;
+}
 
 if(!user){
 login.style.display="block";
@@ -157,6 +181,7 @@ await signOut(auth);
 message.textContent="এই অ্যাকাউন্টে Admin অনুমতি নেই।";
 }
 }catch(e){
+console.error(e);
 await signOut(auth);
 message.textContent="Admin অনুমতি যাচাই করা যায়নি।";
 }
@@ -165,13 +190,18 @@ message.textContent="Admin অনুমতি যাচাই করা যা�
 function loadApplications(){
 applications.textContent="আবেদন লোড হচ্ছে...";
 
-stopApplications=onSnapshot(collection(db,"driverApplications"),snapshot=>{
+stopApplications=onSnapshot(
+collection(db,"driverApplications"),
+snapshot=>{
 applications.replaceChildren();
 
 const total=snapshot.size;
-const pending=snapshot.docs.filter(item=>item.data().status==="pending").length;
+const pending=snapshot.docs.filter(
+item=>item.data().status==="pending"
+).length;
 
-driverCount.textContent="মোট আবেদন: "+total+" | Pending: "+pending;
+driverCount.textContent=
+"মোট আবেদন: "+total+" | Pending: "+pending;
 
 if(total===0){
 applications.textContent="এখনো কোনো আবেদন নেই।";
@@ -193,7 +223,9 @@ const phone=document.createElement("p");
 phone.textContent="মোবাইল: "+(data.phone||"নেই");
 
 const vehicle=document.createElement("p");
-vehicle.textContent="গাড়ির ধরন: "+(data.vehicleType==="bike"?"Bike":data.vehicleType==="car"?"Private Car":"নেই");
+vehicle.textContent="গাড়ির ধরন: "+
+(data.vehicleType==="bike"?"Bike":
+data.vehicleType==="car"?"Private Car":"নেই");
 
 const status=document.createElement("p");
 status.textContent="আবেদনের অবস্থা: "+(data.status||"অজানা");
@@ -208,20 +240,28 @@ approve.textContent="Approve";
 const reject=document.createElement("button");
 reject.textContent="Reject";
 
-approve.onclick=()=>reviewApplication(item.id,"approved",approve,reject);
-reject.onclick=()=>reviewApplication(item.id,"rejected",approve,reject);
+approve.onclick=()=>reviewApplication(
+item.id,"approved",approve,reject
+);
+
+reject.onclick=()=>reviewApplication(
+item.id,"rejected",approve,reject
+);
 
 card.append(approve,reject);
 }
 
 applications.appendChild(card);
+});
 
-});
-},error=>{
+},
+error=>{
 console.error(error);
-applications.textContent="আবেদন লোড হয়নি। Firebase Rules ও Admin অনুমতি পরীক্ষা করুন।";
+applications.textContent=
+"আবেদন লোড হয়নি। Firebase Rules ও Admin অনুমতি পরীক্ষা করুন।";
 driverCount.textContent="ডেটাবেস সমস্যা";
-});
+}
+);
 }
 
 function loadOnlineDrivers(){
@@ -232,7 +272,9 @@ collection(db,"driverPresence"),
 where("online","==",true)
 );
 
-stopPresence=onSnapshot(onlineQuery,async snapshot=>{
+stopPresence=onSnapshot(
+onlineQuery,
+async snapshot=>{
 onlineDrivers.replaceChildren();
 
 if(snapshot.empty){
@@ -241,7 +283,6 @@ return;
 }
 
 for(const item of snapshot.docs){
-
 const uid=item.id;
 const presence=item.data();
 
@@ -261,7 +302,7 @@ vehicle.textContent="গাড়ির তথ্য লোড হচ্ছে...";
 const lastUpdate=document.createElement("p");
 lastUpdate.className="lastUpdate";
 
-if(presence.updatedAt && presence.updatedAt.toDate){
+if(presence.updatedAt&&presence.updatedAt.toDate){
 lastUpdate.textContent="সর্বশেষ আপডেট: "+
 presence.updatedAt.toDate().toLocaleString("bn-BD");
 }else{
@@ -298,9 +339,11 @@ card.append(name,status,vehicle,lastUpdate,offlineButton);
 onlineDrivers.appendChild(card);
 
 try{
-const appDoc=await getDoc(doc(db,"driverApplications",uid));
+const appDoc=await getDoc(
+doc(db,"driverApplications",uid)
+);
 
-if(appDoc.exists() && appDoc.data().status==="approved"){
+if(appDoc.exists()&&appDoc.data().status==="approved"){
 const data=appDoc.data();
 
 name.textContent=data.fullName||"নাম দেওয়া হয়নি";
@@ -314,14 +357,18 @@ card.remove();
 }
 
 }catch(e){
+console.error(e);
 vehicle.textContent="চালকের বিস্তারিত পাওয়া যায়নি।";
 }
 }
 
-},error=>{
+},
+error=>{
 console.error(error);
-onlineDrivers.textContent="Online তালিকা লোড হয়নি। Rules পরীক্ষা করুন।";
-});
+onlineDrivers.textContent=
+"Online তালিকা লোড হয়নি। Rules পরীক্ষা করুন।";
+}
+);
 }
 
 async function reviewApplication(id,status,approve,reject){
