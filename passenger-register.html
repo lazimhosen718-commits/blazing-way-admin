@@ -1,0 +1,207 @@
+
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BLAZING-WAY Passenger Registration</title>
+<style>
+*{box-sizing:border-box}
+body{
+ margin:0;
+ font-family:Arial,sans-serif;
+ background:#eef2f7;
+ color:#172554;
+}
+header{
+ background:#123b70;
+ color:white;
+ text-align:center;
+ padding:22px;
+}
+main{
+ max-width:480px;
+ margin:25px auto;
+ padding:15px;
+}
+.card{
+ background:white;
+ padding:22px;
+ border-radius:12px;
+ box-shadow:0 3px 12px #ddd;
+}
+input{
+ width:100%;
+ padding:14px;
+ margin:9px 0;
+ border:1px solid #ccc;
+ border-radius:7px;
+ font-size:16px;
+}
+button{
+ width:100%;
+ padding:14px;
+ margin-top:12px;
+ background:#123b70;
+ color:white;
+ border:0;
+ border-radius:7px;
+ font-size:16px;
+ cursor:pointer;
+}
+button:disabled{opacity:.5}
+#message{
+ overflow-wrap:anywhere;
+ font-weight:bold;
+}
+a{color:#123b70}
+</style>
+</head>
+<body>
+
+<header>
+<h1>BLAZING-WAY</h1>
+<p>Passenger Registration</p>
+</header>
+
+<main>
+<div class="card">
+<h2>যাত্রী অ্যাকাউন্ট খুলুন</h2>
+
+<form id="registerForm">
+<input id="fullName" type="text"
+placeholder="আপনার সম্পূর্ণ নাম" required>
+
+<input id="email" type="email"
+placeholder="আপনার Gmail" required>
+
+<input id="phone" type="tel"
+placeholder="মোবাইল নম্বর (01XXXXXXXXX)"
+pattern="01[3-9][0-9]{8}" required>
+
+<input id="password" type="password"
+placeholder="Password (কমপক্ষে ৬ অক্ষর)"
+minlength="6" required>
+
+<input id="confirmPassword" type="password"
+placeholder="Confirm Password"
+minlength="6" required>
+
+<button id="registerBtn" type="submit">
+Create Passenger Account
+</button>
+</form>
+
+<p id="message"></p>
+
+<p>আগে অ্যাকাউন্ট থাকলে
+<a href="passenger-login.html">Login করুন</a>
+</p>
+</div>
+</main>
+
+<script type="module">
+import {initializeApp}
+from "https://www.gstatic.com/firebasejs/12.0.0/firebase-app.js";
+
+import {
+getAuth,
+createUserWithEmailAndPassword,
+updateProfile
+} from "https://www.gstatic.com/firebasejs/12.0.0/firebase-auth.js";
+
+import {
+getFirestore,
+doc,
+setDoc,
+serverTimestamp
+} from "https://www.gstatic.com/firebasejs/12.0.0/firebase-firestore.js";
+
+const app=initializeApp({
+apiKey:"AIzaSyAV6za_TROkL0LszdEPIWbMfRh00NR21KE",
+authDomain:"blazing-way.firebaseapp.com",
+projectId:"blazing-way",
+storageBucket:"blazing-way.firebasestorage.app",
+messagingSenderId:"100523779075",
+appId:"1:100523779075:web:732df54a1b0565f02e1a36",
+measurementId:"G-9V8GMD28ST"
+});
+
+const auth=getAuth(app);
+const db=getFirestore(app);
+
+const form=document.getElementById("registerForm");
+const message=document.getElementById("message");
+const button=document.getElementById("registerBtn");
+
+form.addEventListener("submit",async(e)=>{
+e.preventDefault();
+message.textContent="";
+
+const fullName=document.getElementById("fullName").value.trim();
+const email=document.getElementById("email").value.trim();
+const phone=document.getElementById("phone").value.trim();
+const password=document.getElementById("password").value;
+const confirmPassword=document.getElementById("confirmPassword").value;
+
+if(password!==confirmPassword){
+message.textContent="দুটি Password মিলছে না।";
+return;
+}
+
+button.disabled=true;
+button.textContent="অ্যাকাউন্ট তৈরি হচ্ছে...";
+
+let userCreated=false;
+
+try{
+const result=await createUserWithEmailAndPassword(
+auth,email,password
+);
+
+const user=result.user;
+userCreated=true;
+
+await updateProfile(user,{displayName:fullName});
+
+await setDoc(doc(db,"passengerProfiles",user.uid),{
+uid:user.uid,
+fullName:fullName,
+email:user.email,
+phone:phone,
+role:"passenger",
+createdAt:serverTimestamp()
+});
+
+message.style.color="green";
+message.textContent="অ্যাকাউন্ট সফলভাবে তৈরি হয়েছে!";
+
+form.reset();
+
+}catch(error){
+console.error("Passenger Registration Error:",error);
+message.style.color="#b42318";
+
+if(userCreated){
+message.textContent=
+"অ্যাকাউন্ট তৈরি হয়েছে, কিন্তু প্রোফাইল সংরক্ষণ হয়নি। Admin-কে জানান।";
+}else{
+const errors={
+"auth/email-already-in-use":"এই Gmail দিয়ে আগে অ্যাকাউন্ট খোলা হয়েছে।",
+"auth/invalid-email":"Gmail ঠিক নয়।",
+"auth/weak-password":"আরও শক্তিশালী Password দিন।",
+"auth/network-request-failed":"ইন্টারনেট সংযোগ পরীক্ষা করুন।"
+};
+message.textContent=
+errors[error.code]||"সমস্যা হয়েছে: "+error.code;
+}
+
+}finally{
+button.disabled=false;
+button.textContent="Create Passenger Account";
+}
+});
+</script>
+
+</body>
+</html>
