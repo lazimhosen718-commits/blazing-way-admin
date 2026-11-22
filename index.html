@@ -5,6 +5,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>BLAZING-WAY Admin</title>
+
 <style>
 *{box-sizing:border-box}
 body{margin:0;font-family:Arial;background:#eef2f7;color:#172554}
@@ -12,19 +13,29 @@ header{background:#123b70;color:white;text-align:center;padding:20px}
 main{max-width:900px;margin:25px auto;padding:15px}
 .card{background:white;padding:20px;margin:15px 0;border-radius:12px;box-shadow:0 3px 12px #ddd}
 input{width:100%;padding:13px;margin:10px 0;border:1px solid #ccc;border-radius:7px}
-button{padding:12px 18px;background:#123b70;color:white;border:0;border-radius:7px;margin-top:10px}
+button{padding:12px 18px;background:#123b70;color:white;border:0;border-radius:7px;margin:5px;cursor:pointer}
+button:disabled{opacity:.5}
 #dashboard{display:none}
 #message{color:#b42318}
 .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px}
 .status{color:#a15c00;font-weight:bold}
+.application{border:1px solid #ddd;padding:15px;margin:12px 0;border-radius:9px;overflow-wrap:anywhere}
+.approved{color:green;font-weight:bold}
+.rejected{color:#b42318;font-weight:bold}
+.pending{color:#a15c00;font-weight:bold}
+#applications{margin-top:15px}
 </style>
 </head>
+
 <body>
+
 <header>
 <h1>BLAZING-WAY</h1>
 <p>Admin Control Center</p>
 </header>
+
 <main>
+
 <div class="card" id="login">
 <h2>Admin Login</h2>
 <input id="email" type="email" placeholder="Admin Email">
@@ -34,6 +45,7 @@ button{padding:12px 18px;background:#123b70;color:white;border:0;border-radius:7
 </div>
 
 <div id="dashboard">
+
 <div class="card">
 <h2>স্বাগতম, Super Admin!</h2>
 <p>BLAZING-WAY Ride Sharing Platform</p>
@@ -41,36 +53,62 @@ button{padding:12px 18px;background:#123b70;color:white;border:0;border-radius:7
 </div>
 
 <div class="grid">
+
 <div class="card">
 <h3>Driver Applications</h3>
 <p>চালকদের আবেদন ব্যবস্থাপনা</p>
-<p class="status">ডেটাবেস সংযোগ বাকি</p>
+<p class="status" id="driverCount">আবেদন লোড হচ্ছে...</p>
 </div>
+
 <div class="card">
 <h3>Passenger Management</h3>
 <p>যাত্রীদের তথ্য ব্যবস্থাপনা</p>
 <p class="status">ডেটাবেস সংযোগ বাকি</p>
 </div>
+
 <div class="card">
 <h3>Ride Monitoring</h3>
 <p>বাইক ও প্রাইভেট কারের রাইড</p>
 <p class="status">ডেটাবেস সংযোগ বাকি</p>
 </div>
+
 <div class="card">
 <h3>Commission</h3>
 <p>প্রতি রাইডে Admin Commission: ৫%</p>
 <p class="status">রাইড ডেটা সংযোগ বাকি</p>
 </div>
+
 </div>
+
+<div class="card">
+<h2>চালকদের আবেদন তালিকা</h2>
+<p>চালকদের আবেদন যাচাই করে অনুমোদন বা বাতিল করুন।</p>
+<div id="applications">আবেদন লোড হচ্ছে...</div>
+</div>
+
 </div>
 </main>
 
 <script type="module">
+
 import {initializeApp} from "https://www.gstatic.com/firebasejs/12.0.0/firebase-app.js";
+
 import {
-getAuth,onAuthStateChanged,signInWithEmailAndPassword,
-signOut,getIdTokenResult
+getAuth,
+onAuthStateChanged,
+signInWithEmailAndPassword,
+signOut,
+getIdTokenResult
 } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-auth.js";
+
+import {
+getFirestore,
+collection,
+onSnapshot,
+doc,
+updateDoc,
+serverTimestamp
+} from "https://www.gstatic.com/firebasejs/12.0.0/firebase-firestore.js";
 
 const app=initializeApp({
 apiKey:"AIzaSyAV6za_TROkL0lSzdEPIWbMfRh00NR21KE",
@@ -82,9 +120,15 @@ appId:"1:100523779075:web:732df54a1b0565f02e1a36"
 });
 
 const auth=getAuth(app);
+const db=getFirestore(app);
+
 const login=document.getElementById("login");
 const dashboard=document.getElementById("dashboard");
 const message=document.getElementById("message");
+const applications=document.getElementById("applications");
+const driverCount=document.getElementById("driverCount");
+
+let stopApplications=null;
 
 document.getElementById("loginBtn").onclick=async()=>{
 message.textContent="";
@@ -100,27 +144,177 @@ message.textContent="Login হয়নি। Email ও Password পরীক্ষ
 };
 
 onAuthStateChanged(auth,async user=>{
+
+if(stopApplications){
+stopApplications();
+stopApplications=null;
+}
+
 if(!user){
 login.style.display="block";
 dashboard.style.display="none";
 return;
 }
+
 try{
+
 const token=await getIdTokenResult(user,true);
+
 if(token.claims.admin===true){
+
 login.style.display="none";
 dashboard.style.display="block";
+
+loadApplications();
+
 }else{
+
 await signOut(auth);
 message.textContent="এই অ্যাকাউন্টে Admin অনুমতি নেই।";
+
 }
+
 }catch(e){
+
 await signOut(auth);
 message.textContent="Admin অনুমতি যাচাই করা যায়নি।";
+
 }
+
 });
 
+function loadApplications(){
+
+applications.textContent="আবেদন লোড হচ্ছে...";
+
+stopApplications=onSnapshot(
+collection(db,"driverApplications"),
+
+snapshot=>{
+
+applications.replaceChildren();
+
+const total=snapshot.size;
+const pending=snapshot.docs.filter(
+item=>item.data().status==="pending"
+).length;
+
+driverCount.textContent=
+"মোট আবেদন: "+total+" | Pending: "+pending;
+
+if(total===0){
+applications.textContent="এখনো কোনো আবেদন নেই।";
+return;
+}
+
+snapshot.forEach(item=>{
+
+const data=item.data();
+
+const card=document.createElement("div");
+card.className="application";
+
+const name=document.createElement("h3");
+name.textContent=data.fullName || "নাম দেওয়া হয়নি";
+
+const email=document.createElement("p");
+email.textContent="Gmail: "+(data.email || "নেই");
+
+const phone=document.createElement("p");
+phone.textContent="মোবাইল: "+(data.phone || "নেই");
+
+const vehicle=document.createElement("p");
+vehicle.textContent="গাড়ির ধরন: "+
+(data.vehicleType==="bike" ? "Bike" :
+data.vehicleType==="car" ? "Private Car" : "নেই");
+
+const status=document.createElement("p");
+status.textContent="আবেদনের অবস্থা: "+(data.status || "অজানা");
+status.className=data.status || "";
+
+card.append(name,email,phone,vehicle,status);
+
+if(data.status==="pending"){
+
+const approve=document.createElement("button");
+approve.textContent="Approve";
+
+const reject=document.createElement("button");
+reject.textContent="Reject";
+
+approve.onclick=()=>reviewApplication(
+item.id,"approved",approve,reject
+);
+
+reject.onclick=()=>reviewApplication(
+item.id,"rejected",approve,reject
+);
+
+card.append(approve,reject);
+
+}
+
+applications.appendChild(card);
+
+});
+
+},
+
+error=>{
+
+console.error(error);
+applications.textContent=
+"আবেদন লোড হয়নি। Firebase Rules ও Admin অনুমতি পরীক্ষা করুন।";
+
+driverCount.textContent="ডেটাবেস সমস্যা";
+
+}
+
+);
+
+}
+
+async function reviewApplication(id,status,approve,reject){
+
+if(!auth.currentUser)return;
+
+approve.disabled=true;
+reject.disabled=true;
+
+try{
+
+await updateDoc(
+doc(db,"driverApplications",id),
+{
+status:status,
+reviewedBy:auth.currentUser.uid,
+reviewedAt:serverTimestamp()
+}
+);
+
+alert(
+status==="approved"
+? "চালকের আবেদন অনুমোদিত হয়েছে।"
+: "চালকের আবেদন বাতিল করা হয়েছে।"
+);
+
+}catch(error){
+
+console.error(error);
+
+alert(
+"পরিবর্তন করা যায়নি। Admin অনুমতি ও Rules পরীক্ষা করুন।"
+);
+
+approve.disabled=false;
+reject.disabled=false;
+
+}
+
+}
+
 document.getElementById("logoutBtn").onclick=()=>signOut(auth);
+
 </script>
 </body>
 </html>
