@@ -6,12 +6,15 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>BLAZING-WAY Driver Registration</title>
 <style>
+*{box-sizing:border-box}
 body{font-family:Arial;background:#eef2f7;margin:0;color:#172554}
 header{background:#123b70;color:white;text-align:center;padding:20px}
 main{max-width:550px;margin:25px auto;padding:15px}
 .card{background:white;padding:22px;border-radius:12px;box-shadow:0 3px 12px #ddd}
-input,select{width:100%;padding:13px;margin:10px 0;border:1px solid #ccc;border-radius:7px;box-sizing:border-box}
+input,select{width:100%;padding:13px;margin:10px 0;border:1px solid #ccc;border-radius:7px}
 button{background:#123b70;color:white;border:0;padding:13px;border-radius:7px;width:100%;margin-top:12px}
+button:disabled{opacity:.6}
+#message{white-space:pre-wrap}
 </style>
 </head>
 <body>
@@ -24,28 +27,114 @@ button{background:#123b70;color:white;border:0;padding:13px;border-radius:7px;wi
 <h2>চালক নিবন্ধন</h2>
 <form id="driverForm">
 <label>পূর্ণ নাম</label>
-<input type="text" placeholder="আপনার নাম" required>
+<input id="fullName" type="text" required minlength="2">
 
 <label>Gmail</label>
-<input type="email" placeholder="আপনার Gmail" required>
+<input id="email" type="email" required>
 
 <label>Password</label>
-<input type="password" placeholder="কমপক্ষে ৬ অক্ষর" minlength="6" required>
+<input id="password" type="password" minlength="6" required>
 
 <label>মোবাইল নম্বর</label>
-<input type="tel" placeholder="01XXXXXXXXX" required>
+<input id="phone" type="tel" placeholder="01XXXXXXXXX" required>
 
 <label>গাড়ির ধরন</label>
-<select required>
+<select id="vehicleType" required>
 <option value="">নির্বাচন করুন</option>
 <option value="bike">Bike</option>
 <option value="car">Private Car</option>
 </select>
 
-<button type="button" disabled>আবেদন জমা (ডেটাবেস সংযোগ বাকি)</button>
-<p>আবেদন জমা দেওয়ার ব্যবস্থা এখনো প্রস্তুত নয়।</p>
+<button id="submitBtn" type="submit">অ্যাকাউন্ট তৈরি ও আবেদন জমা</button>
 </form>
+<p id="message"></p>
 </div>
 </main>
+
+<script type="module">
+import {initializeApp} from "https://www.gstatic.com/firebasejs/12.0.0/firebase-app.js";
+
+import {
+ getAuth,
+ createUserWithEmailAndPassword,
+ sendEmailVerification
+} from "https://www.gstatic.com/firebasejs/12.0.0/firebase-auth.js";
+
+import {
+ getFirestore,
+ doc,
+ setDoc,
+ serverTimestamp
+} from "https://www.gstatic.com/firebasejs/12.0.0/firebase-firestore.js";
+
+const app = initializeApp({
+ apiKey:"AIzaSyAV6za_TROkL0lSzdEPIWbMfRh00NR21KE",
+ authDomain:"blazing-way.firebaseapp.com",
+ projectId:"blazing-way",
+ storageBucket:"blazing-way.firebasestorage.app",
+ messagingSenderId:"100523779075",
+ appId:"1:100523779075:web:732df54a1b0565f02e1a36"
+});
+
+const auth = getAuth(app);
+const db = getFirestore(app);
+
+const form = document.getElementById("driverForm");
+const message = document.getElementById("message");
+const submitBtn = document.getElementById("submitBtn");
+
+form.addEventListener("submit", async (event) => {
+ event.preventDefault();
+ message.textContent = "";
+ submitBtn.disabled = true;
+
+ try {
+  const fullName = document.getElementById("fullName").value.trim();
+  const email = document.getElementById("email").value.trim().toLowerCase();
+  const password = document.getElementById("password").value;
+  const phone = document.getElementById("phone").value.trim();
+  const vehicleType = document.getElementById("vehicleType").value;
+
+  if (!/^01[3-9][0-9]{8}$/.test(phone)) {
+   throw new Error("সঠিক ১১ সংখ্যার বাংলাদেশি মোবাইল নম্বর দিন।");
+  }
+
+  const result = await createUserWithEmailAndPassword(
+   auth, email, password
+  );
+
+  const user = result.user;
+
+  await sendEmailVerification(user);
+
+  await setDoc(doc(db, "driverApplications", user.uid), {
+   uid: user.uid,
+   fullName,
+   email: user.email,
+   phone,
+   vehicleType,
+   status: "pending",
+   submittedAt: serverTimestamp()
+  });
+
+  form.reset();
+  message.textContent =
+   "আবেদন জমা হয়েছে! আপনার Gmail-এ verification link পাঠানো হয়েছে। Email যাচাই করুন। Admin অনুমোদন না দেওয়া পর্যন্ত রাইড নিতে পারবেন না।";
+
+ } catch (error) {
+  console.error(error);
+  const messages = {
+   "auth/email-already-in-use":"এই Gmail দিয়ে আগে অ্যাকাউন্ট তৈরি হয়েছে।",
+   "auth/weak-password":"আরও শক্তিশালী Password দিন।",
+   "auth/invalid-email":"সঠিক Gmail দিন。",
+   "permission-denied":"ডেটাবেস অনুমতি পাওয়া যায়নি। Rules ও Firebase সংযোগ পরীক্ষা করতে হবে।"
+  };
+  message.textContent =
+   messages[error.code] || error.message || "আবেদন জমা হয়নি। আবার চেষ্টা করুন।";
+ } finally {
+  submitBtn.disabled = false;
+ }
+});
+</script>
 </body>
 </html>
