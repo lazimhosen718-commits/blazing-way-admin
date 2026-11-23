@@ -1,9 +1,11 @@
+
 <!DOCTYPE html>
 <html lang="bn">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>BLAZING-WAY Admin</title>
+
 <style>
 *{box-sizing:border-box}
 body{margin:0;font-family:Arial,sans-serif;background:#eef2f7;color:#172554}
@@ -25,9 +27,14 @@ button:disabled{opacity:.5;cursor:not-allowed}
 .pending{color:#a15c00;font-weight:bold}
 .lastUpdate{color:#475569;font-size:14px}
 .assignmentBox{background:#f1f5f9;border-radius:8px;padding:12px;margin-top:12px}
-.commissionBox{background:#e8f5e9;padding:12px;border-radius:8px;margin-top:12px}
+.commissionBox{background:#e8f5e9;padding:12px;border-radius:8px;margin-top:12px;line-height:1.6}
+.earningsBox{background:#f1f5f9;padding:14px;border-radius:9px;margin:12px 0;line-height:1.7}
+.earningsTotal{background:#e8f5e9;padding:14px;border-radius:9px;line-height:1.8}
+.income{color:#087443;font-weight:bold}
+@media(max-width:400px){main{padding:8px}.card{padding:14px}}
 </style>
 </head>
+
 <body>
 
 <header>
@@ -36,6 +43,7 @@ button:disabled{opacity:.5;cursor:not-allowed}
 </header>
 
 <main>
+
 <div class="card" id="login">
 <h2>Admin Login</h2>
 <input id="email" type="email" placeholder="Admin Email">
@@ -45,6 +53,7 @@ button:disabled{opacity:.5;cursor:not-allowed}
 </div>
 
 <div id="dashboard">
+
 <div class="card">
 <h2>স্বাগতম, Super Admin!</h2>
 <p>BLAZING-WAY Ride Sharing Platform</p>
@@ -52,28 +61,40 @@ button:disabled{opacity:.5;cursor:not-allowed}
 </div>
 
 <div class="grid">
+
 <div class="card">
 <h3>Driver Applications</h3>
 <p id="driverCount">লোড হচ্ছে...</p>
 </div>
+
 <div class="card">
 <h3>Passenger Management</h3>
 <p>Passenger Booking ও Ride Monitoring</p>
 </div>
+
 <div class="card">
 <h3>Ride Monitoring</h3>
 <p id="rideCount">লোড হচ্ছে...</p>
 </div>
+
 <div class="card">
 <h3>Commission</h3>
 <p>প্রতি Completed Ride-এ ১%</p>
 <p id="commissionInfo">লোড হচ্ছে...</p>
 </div>
+
 </div>
 
 <div class="card">
 <h2>🟢 Online Drivers</h2>
 <div id="onlineDrivers">লোড হচ্ছে...</div>
+</div>
+
+<!-- DRIVER EARNINGS REPORT -->
+<div class="card">
+<h2>💰 Driver Earnings Report</h2>
+<p>প্রত্যেক চালকের Completed Ride অনুযায়ী আয়ের হিসাব।</p>
+<div id="driverEarningsReport">আয়ের তথ্য লোড হচ্ছে...</div>
 </div>
 
 <div class="card">
@@ -86,23 +107,37 @@ button:disabled{opacity:.5;cursor:not-allowed}
 <p id="bookingCount">লোড হচ্ছে...</p>
 <div id="rideBookings">লোড হচ্ছে...</div>
 </div>
+
 </div>
 </main>
 
 <script type="module">
-import {initializeApp} from "https://www.gstatic.com/firebasejs/12.0.0/firebase-app.js";
+
+import {initializeApp}
+from "https://www.gstatic.com/firebasejs/12.0.0/firebase-app.js";
 
 import {
- getAuth,onAuthStateChanged,signInWithEmailAndPassword,
- signOut,getIdTokenResult
+ getAuth,
+ onAuthStateChanged,
+ signInWithEmailAndPassword,
+ signOut,
+ getIdTokenResult
 } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-auth.js";
 
 import {
- getFirestore,collection,onSnapshot,doc,updateDoc,
- serverTimestamp,query,where,getDoc
+ getFirestore,
+ collection,
+ onSnapshot,
+ doc,
+ updateDoc,
+ serverTimestamp,
+ query,
+ where,
+ getDoc
 } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-firestore.js";
 
 const COMMISSION_RATE=0.01;
+const DRIVER_RATE=0.99;
 
 const app=initializeApp({
  apiKey:"AIzaSyBVzdXw-nO8ixDqxbGhTj3lbBX37XUMCr4",
@@ -121,8 +156,10 @@ const $=id=>document.getElementById(id);
 let stopApplications=null;
 let stopPresence=null;
 let stopBookings=null;
+
 let availableDrivers=[];
 let latestBookingDocs=[];
+let driverApplicationData={};
 let presenceVersion=0;
 let migratingBookings=new Set();
 
@@ -130,8 +167,13 @@ function money(value){
  return Number(value||0).toFixed(2);
 }
 
+
+// ADMIN LOGIN
+
 $("loginBtn").onclick=async()=>{
+
  $("message").textContent="";
+
  const email=$("email").value.trim();
  const password=$("password").value;
 
@@ -143,142 +185,229 @@ $("loginBtn").onclick=async()=>{
  $("loginBtn").disabled=true;
 
  try{
+
   await signInWithEmailAndPassword(auth,email,password);
+
  }catch(error){
+
   console.error(error);
   $("message").textContent="Login Error: "+error.code;
+
  }finally{
+
   $("loginBtn").disabled=false;
+
  }
+
 };
 
+
+// AUTH CHECK
+
 onAuthStateChanged(auth,async user=>{
+
  if(stopApplications)stopApplications();
  if(stopPresence)stopPresence();
  if(stopBookings)stopBookings();
 
  stopApplications=stopPresence=stopBookings=null;
+
  availableDrivers=[];
  latestBookingDocs=[];
+ driverApplicationData={};
+
  presenceVersion++;
  migratingBookings.clear();
 
  if(!user){
+
   $("login").style.display="block";
   $("dashboard").style.display="none";
   return;
+
  }
 
  try{
+
   const token=await getIdTokenResult(user,true);
 
   if(token.claims.admin===true){
+
    $("login").style.display="none";
    $("dashboard").style.display="block";
+
    loadApplications();
    loadOnlineDrivers();
    loadRideBookings();
+
   }else{
+
    await signOut(auth);
+
    $("login").style.display="block";
    $("message").textContent="এই অ্যাকাউন্টে Admin অনুমতি নেই।";
+
   }
+
  }catch(error){
+
   console.error(error);
+
   await signOut(auth);
+
   $("login").style.display="block";
   $("message").textContent="Admin অনুমতি যাচাই করা যায়নি।";
+
  }
+
 });
+
 
 // DRIVER APPLICATIONS
 
 function loadApplications(){
+
  $("applications").textContent="আবেদন লোড হচ্ছে...";
 
- stopApplications=onSnapshot(collection(db,"driverApplications"),snapshot=>{
-  $("applications").replaceChildren();
+ stopApplications=onSnapshot(
+  collection(db,"driverApplications"),
 
-  const pending=snapshot.docs.filter(x=>x.data().status==="pending").length;
-  $("driverCount").textContent="মোট আবেদন: "+snapshot.size+" | Pending: "+pending;
+  snapshot=>{
 
-  if(snapshot.empty){
-   $("applications").textContent="এখনো কোনো আবেদন নেই।";
-   return;
-  }
+   $("applications").replaceChildren();
 
-  snapshot.forEach(item=>{
-   const d=item.data();
-   const card=document.createElement("div");
-   card.className="application";
+   driverApplicationData={};
 
-   const name=document.createElement("h3");
-   name.textContent=d.fullName||"নাম নেই";
+   snapshot.forEach(item=>{
+    driverApplicationData[item.id]=item.data();
+   });
 
-   const email=document.createElement("p");
-   email.textContent="Gmail: "+(d.email||"নেই");
+   const pending=snapshot.docs.filter(
+    x=>x.data().status==="pending"
+   ).length;
 
-   const phone=document.createElement("p");
-   phone.textContent="মোবাইল: "+(d.phone||"নেই");
+   $("driverCount").textContent=
+    "মোট আবেদন: "+snapshot.size+
+    " | Pending: "+pending;
 
-   const vehicle=document.createElement("p");
-   vehicle.textContent="গাড়ি: "+(d.vehicleType==="bike"?"Bike":d.vehicleType==="car"?"Private Car":"নেই");
+   renderDriverEarnings(latestBookingDocs);
 
-   const status=document.createElement("p");
-   status.textContent="আবেদনের অবস্থা: "+(d.status||"অজানা");
-   status.className=d.status||"";
+   if(snapshot.empty){
 
-   card.append(name,email,phone,vehicle,status);
+    $("applications").textContent="এখনো কোনো আবেদন নেই।";
+    return;
 
-   if(d.status==="pending"){
-    const approve=document.createElement("button");
-    approve.textContent="Approve";
-    approve.className="approveBtn";
-
-    const reject=document.createElement("button");
-    reject.textContent="Reject";
-    reject.className="rejectBtn";
-
-    approve.onclick=()=>reviewApplication(item.id,"approved",approve,reject);
-    reject.onclick=()=>reviewApplication(item.id,"rejected",approve,reject);
-
-    card.append(approve,reject);
    }
 
-   $("applications").appendChild(card);
-  });
- },error=>{
-  console.error(error);
-  $("applications").textContent="আবেদন লোড হয়নি। Rules পরীক্ষা করুন।";
- });
+   snapshot.forEach(item=>{
+
+    const d=item.data();
+
+    const card=document.createElement("div");
+    card.className="application";
+
+    const name=document.createElement("h3");
+    name.textContent=d.fullName||"নাম নেই";
+
+    const email=document.createElement("p");
+    email.textContent="Gmail: "+(d.email||"নেই");
+
+    const phone=document.createElement("p");
+    phone.textContent="মোবাইল: "+(d.phone||"নেই");
+
+    const vehicle=document.createElement("p");
+    vehicle.textContent=
+     "গাড়ি: "+
+     (d.vehicleType==="bike"?"Bike":
+      d.vehicleType==="car"?"Private Car":"নেই");
+
+    const status=document.createElement("p");
+    status.textContent="আবেদনের অবস্থা: "+(d.status||"অজানা");
+    status.className=d.status||"";
+
+    card.append(name,email,phone,vehicle,status);
+
+    if(d.status==="pending"){
+
+     const approve=document.createElement("button");
+     approve.textContent="Approve";
+     approve.className="approveBtn";
+
+     const reject=document.createElement("button");
+     reject.textContent="Reject";
+     reject.className="rejectBtn";
+
+     approve.onclick=()=>reviewApplication(
+      item.id,"approved",approve,reject
+     );
+
+     reject.onclick=()=>reviewApplication(
+      item.id,"rejected",approve,reject
+     );
+
+     card.append(approve,reject);
+
+    }
+
+    $("applications").appendChild(card);
+
+   });
+
+  },
+
+  error=>{
+
+   console.error(error);
+   $("applications").textContent=
+    "আবেদন লোড হয়নি। Rules পরীক্ষা করুন।";
+
+  }
+
+ );
+
 }
+
 
 // ONLINE DRIVERS
 
 function loadOnlineDrivers(){
+
  $("onlineDrivers").textContent="চালকদের তথ্য লোড হচ্ছে...";
 
- const q=query(collection(db,"driverPresence"),where("online","==",true));
+ const q=query(
+  collection(db,"driverPresence"),
+  where("online","==",true)
+ );
 
  stopPresence=onSnapshot(q,async snapshot=>{
+
   const version=++presenceVersion;
+
   availableDrivers=[];
   $("onlineDrivers").replaceChildren();
 
   if(snapshot.empty){
+
    $("onlineDrivers").textContent="এখন কোনো চালক Online নেই।";
    renderRideBookings(latestBookingDocs);
    return;
+
   }
 
   const drivers=[];
 
   for(const item of snapshot.docs){
+
    try{
-    const appDoc=await getDoc(doc(db,"driverApplications",item.id));
+
+    const appDoc=await getDoc(
+     doc(db,"driverApplications",item.id)
+    );
+
     if(!appDoc.exists())continue;
 
     const d=appDoc.data();
+
     if(d.status!=="approved")continue;
 
     drivers.push({
@@ -288,19 +417,28 @@ function loadOnlineDrivers(){
      vehicleType:d.vehicleType||"",
      presence:item.data()
     });
+
    }catch(error){
+
     console.error("Driver Details:",error);
+
    }
+
   }
 
   if(version!==presenceVersion)return;
+
   availableDrivers=drivers;
 
   if(!drivers.length){
-   $("onlineDrivers").textContent="অনুমোদিত Online Driver পাওয়া যায়নি।";
+
+   $("onlineDrivers").textContent=
+    "অনুমোদিত Online Driver পাওয়া যায়নি।";
+
   }
 
   drivers.forEach(driver=>{
+
    const card=document.createElement("div");
    card.className="application";
 
@@ -312,15 +450,19 @@ function loadOnlineDrivers(){
    status.className="online";
 
    const vehicle=document.createElement("p");
-   vehicle.textContent="গাড়ি: "+(driver.vehicleType==="bike"?"Bike":"Private Car");
+   vehicle.textContent=
+    "গাড়ি: "+
+    (driver.vehicleType==="bike"?"Bike":"Private Car");
 
    const phone=document.createElement("p");
    phone.textContent="মোবাইল: "+driver.phone;
 
    const last=document.createElement("p");
    last.className="lastUpdate";
+
    last.textContent=driver.presence.updatedAt?.toDate?
-    "সর্বশেষ আপডেট: "+driver.presence.updatedAt.toDate().toLocaleString("bn-BD"):
+    "সর্বশেষ আপডেট: "+
+    driver.presence.updatedAt.toDate().toLocaleString("bn-BD"):
     "সর্বশেষ আপডেট পাওয়া যায়নি";
 
    const offline=document.createElement("button");
@@ -328,90 +470,298 @@ function loadOnlineDrivers(){
    offline.className="offlineBtn";
 
    offline.onclick=async()=>{
+
     if(!confirm("এই চালককে Offline করতে চান?"))return;
+
     offline.disabled=true;
 
     try{
-     await updateDoc(doc(db,"driverPresence",driver.uid),{
-      online:false,
-      updatedAt:serverTimestamp()
-     });
+
+     await updateDoc(
+      doc(db,"driverPresence",driver.uid),
+      {
+       online:false,
+       updatedAt:serverTimestamp()
+      }
+     );
+
      alert("চালক Offline হয়েছেন।");
+
     }catch(error){
+
      console.error(error);
      alert("Offline করা যায়নি: "+error.code);
      offline.disabled=false;
+
     }
+
    };
 
    card.append(name,status,vehicle,phone,last,offline);
    $("onlineDrivers").appendChild(card);
+
   });
 
   renderRideBookings(latestBookingDocs);
+
  },error=>{
+
   console.error(error);
   $("onlineDrivers").textContent="Online তালিকা লোড হয়নি।";
+
  });
+
 }
+
 
 // RIDE BOOKINGS
 
 function loadRideBookings(){
+
  $("rideBookings").textContent="বুকিং লোড হচ্ছে...";
 
- stopBookings=onSnapshot(collection(db,"rideBookings"),snapshot=>{
-  latestBookingDocs=snapshot.docs;
-  renderRideBookings(latestBookingDocs);
- },error=>{
-  console.error(error);
-  $("rideBookings").textContent="বুকিং লোড হয়নি। Rules পরীক্ষা করুন।";
- });
+ stopBookings=onSnapshot(
+  collection(db,"rideBookings"),
+
+  snapshot=>{
+
+   latestBookingDocs=snapshot.docs;
+
+   renderRideBookings(latestBookingDocs);
+
+  },
+
+  error=>{
+
+   console.error(error);
+   $("rideBookings").textContent=
+    "বুকিং লোড হয়নি। Rules পরীক্ষা করুন।";
+
+  }
+
+ );
+
 }
+
+
+// DRIVER EARNINGS REPORT
+
+function renderDriverEarnings(docs){
+
+ const report=$("driverEarningsReport");
+ report.replaceChildren();
+
+ const drivers={};
+
+ let allFare=0;
+ let allCommission=0;
+ let allIncome=0;
+ let totalCompleted=0;
+
+ docs.forEach(item=>{
+
+  const d=item.data();
+
+  if(d.status!=="completed"||!d.driverId)return;
+
+  const id=d.driverId;
+  const fare=Number(d.estimatedFare||0);
+
+  const commission=Math.round(
+   fare*COMMISSION_RATE*100
+  )/100;
+
+  const income=Math.round(
+   fare*DRIVER_RATE*100
+  )/100;
+
+  if(!drivers[id]){
+
+   const application=driverApplicationData[id]||{};
+
+   drivers[id]={
+    name:d.driverName||application.fullName||"নাম পাওয়া যায়নি",
+    phone:d.driverPhone||application.phone||"নেই",
+    count:0,
+    fare:0,
+    commission:0,
+    income:0
+   };
+
+  }
+
+  drivers[id].count++;
+  drivers[id].fare+=fare;
+  drivers[id].commission+=commission;
+  drivers[id].income+=income;
+
+  allFare+=fare;
+  allCommission+=commission;
+  allIncome+=income;
+  totalCompleted++;
+
+ });
+
+ if(totalCompleted===0){
+
+  report.textContent="এখনো কোনো Completed Ride নেই।";
+  return;
+
+ }
+
+ const totalBox=document.createElement("div");
+ totalBox.className="earningsTotal";
+
+ const totalTitle=document.createElement("h3");
+ totalTitle.textContent="সর্বমোট হিসাব";
+
+ const totalRide=document.createElement("p");
+ totalRide.textContent=
+  "Completed Ride: "+totalCompleted;
+
+ const totalFare=document.createElement("p");
+ totalFare.textContent=
+  "মোট ভাড়া: ৳"+money(allFare);
+
+ const totalCommission=document.createElement("p");
+ totalCommission.textContent=
+  "Admin কমিশন ১%: ৳"+money(allCommission);
+
+ const totalIncome=document.createElement("h3");
+ totalIncome.className="income";
+ totalIncome.textContent=
+  "সকল Driver-এর মোট আয় ৯৯%: ৳"+money(allIncome);
+
+ totalBox.append(
+  totalTitle,
+  totalRide,
+  totalFare,
+  totalCommission,
+  totalIncome
+ );
+
+ report.appendChild(totalBox);
+
+ Object.keys(drivers).forEach(id=>{
+
+  const d=drivers[id];
+
+  const card=document.createElement("div");
+  card.className="earningsBox";
+
+  const name=document.createElement("h3");
+  name.textContent="🚗 "+d.name;
+
+  const phone=document.createElement("p");
+  phone.textContent="মোবাইল: "+d.phone;
+
+  const count=document.createElement("p");
+  count.textContent="Completed Ride: "+d.count;
+
+  const fare=document.createElement("p");
+  fare.textContent="মোট ভাড়া: ৳"+money(d.fare);
+
+  const commission=document.createElement("p");
+  commission.textContent=
+   "Admin কমিশন ১%: ৳"+money(d.commission);
+
+  const income=document.createElement("h3");
+  income.className="income";
+  income.textContent=
+   "চালকের আয় ৯৯%: ৳"+money(d.income);
+
+  card.append(
+   name,
+   phone,
+   count,
+   fare,
+   commission,
+   income
+  );
+
+  report.appendChild(card);
+
+ });
+
+}
+
 
 // OLD BOOKING DRIVER DETAILS
 
 async function migrateOldBooking(item,data){
+
  if(!data.driverId)return;
+
  if(data.driverName&&data.driverPhone)return;
+
  if(migratingBookings.has(item.id))return;
 
  migratingBookings.add(item.id);
 
  try{
-  const driverDoc=await getDoc(doc(db,"driverApplications",data.driverId));
+
+  const driverDoc=await getDoc(
+   doc(db,"driverApplications",data.driverId)
+  );
+
   if(!driverDoc.exists())return;
 
   const driver=driverDoc.data();
 
-  await updateDoc(doc(db,"rideBookings",item.id),{
-   driverName:driver.fullName||"নাম পাওয়া যায়নি",
-   driverPhone:driver.phone||"নম্বর পাওয়া যায়নি"
-  });
+  await updateDoc(
+   doc(db,"rideBookings",item.id),
+   {
+    driverName:driver.fullName||"নাম পাওয়া যায়নি",
+    driverPhone:driver.phone||"নম্বর পাওয়া যায়নি"
+   }
+  );
+
  }catch(error){
+
   console.error("পুরোনো Booking আপডেট:",error);
+
  }finally{
+
   migratingBookings.delete(item.id);
+
  }
+
 }
+
 
 // RENDER BOOKINGS AND COMMISSION
 
 function renderRideBookings(docs){
+
  $("rideBookings").replaceChildren();
 
- const total=docs.length;
- const pending=docs.filter(x=>x.data().status==="pending").length;
- const completed=docs.filter(x=>x.data().status==="completed");
+ renderDriverEarnings(docs);
 
- $("bookingCount").textContent="মোট বুকিং: "+total+" | Pending: "+pending;
- $("rideCount").textContent="মোট বুকিং: "+total+" | Pending: "+pending;
+ const total=docs.length;
+
+ const pending=docs.filter(
+  x=>x.data().status==="pending"
+ ).length;
+
+ const completed=docs.filter(
+  x=>x.data().status==="completed"
+ );
+
+ $("bookingCount").textContent=
+  "মোট বুকিং: "+total+" | Pending: "+pending;
+
+ $("rideCount").textContent=
+  "মোট বুকিং: "+total+" | Pending: "+pending;
 
  let commission=0;
 
  completed.forEach(item=>{
+
   const d=item.data();
-  commission+=Number(d.estimatedFare||0)*COMMISSION_RATE;
+
+  commission+=
+   Number(d.estimatedFare||0)*COMMISSION_RATE;
+
  });
 
  $("commissionInfo").textContent=
@@ -419,15 +769,19 @@ function renderRideBookings(docs){
   " | মোট ১% কমিশন: ৳"+money(commission);
 
  if(!total){
+
   $("rideBookings").textContent="এখনো কোনো Booking নেই।";
   return;
+
  }
 
  const sorted=[...docs].sort((a,b)=>
-  (b.data().createdAt?.toMillis?.()||0)-(a.data().createdAt?.toMillis?.()||0)
+  (b.data().createdAt?.toMillis?.()||0)-
+  (a.data().createdAt?.toMillis?.()||0)
  );
 
  sorted.forEach(item=>{
+
   const d=item.data();
 
   if(d.driverId&&(!d.driverName||!d.driverPhone)){
@@ -438,15 +792,21 @@ function renderRideBookings(docs){
   card.className="booking";
 
   function line(label,value){
+
    const p=document.createElement("p");
    p.textContent=label+": "+value;
    return p;
+
   }
 
   const title=document.createElement("h3");
   title.textContent="🚕 Ride Booking";
 
-  const status=line("Booking Status",d.status||"unknown");
+  const status=line(
+   "Booking Status",
+   d.status||"unknown"
+  );
+
   status.className=d.status||"";
 
   card.append(
@@ -455,32 +815,56 @@ function renderRideBookings(docs){
    line("Passenger ID",d.passengerId||"নেই"),
    line("Pickup",d.pickup||"নেই"),
    line("Destination",d.destination||"নেই"),
-   line("যানবাহন",d.vehicleType==="bike"?"Bike":d.vehicleType==="car"?"Private Car":"অজানা"),
+   line("যানবাহন",
+    d.vehicleType==="bike"?"Bike":
+    d.vehicleType==="car"?"Private Car":"অজানা"
+   ),
    line("দূরত্ব",(d.distanceKm||0)+" কিমি"),
    line("ভাড়া","৳"+(d.estimatedFare||0)),
-   line("Booking Time",d.createdAt?.toDate?d.createdAt.toDate().toLocaleString("bn-BD"):"পাওয়া যায়নি"),
+   line("Booking Time",
+    d.createdAt?.toDate?
+    d.createdAt.toDate().toLocaleString("bn-BD"):
+    "পাওয়া যায়নি"
+   ),
    status
   );
 
   if(d.driverId){
+
    card.append(
     line("Assigned Driver ID",d.driverId),
     line("চালকের নাম",d.driverName||"তথ্য আপডেট হচ্ছে..."),
     line("চালকের মোবাইল",d.driverPhone||"তথ্য আপডেট হচ্ছে...")
    );
+
   }
 
   // COMPLETED RIDE COMMISSION
+
   if(d.status==="completed"){
-   const amount=Number(d.estimatedFare||0)*COMMISSION_RATE;
+
+   const amount=
+    Number(d.estimatedFare||0)*COMMISSION_RATE;
+
+   const driverIncome=
+    Number(d.estimatedFare||0)*DRIVER_RATE;
+
    const box=document.createElement("div");
    box.className="commissionBox";
-   box.textContent="এই Ride-এর ১% কমিশন: ৳"+money(amount);
+
+   box.textContent=
+    "এই Ride-এর Admin ১% কমিশন: ৳"+money(amount)+
+    " | Driver-এর আয় ৯৯%: ৳"+money(driverIncome);
+
    card.appendChild(box);
+
   }
 
+
   // ACCEPT OR REJECT PENDING BOOKING
+
   if(d.status==="pending"){
+
    const accept=document.createElement("button");
    accept.textContent="Accept Booking";
    accept.className="approveBtn";
@@ -489,37 +873,63 @@ function renderRideBookings(docs){
    reject.textContent="Reject Booking";
    reject.className="rejectBtn";
 
-   accept.onclick=()=>changeBookingStatus(item.id,"accepted",accept,reject);
-   reject.onclick=()=>changeBookingStatus(item.id,"rejected",accept,reject);
+   accept.onclick=()=>changeBookingStatus(
+    item.id,"accepted",accept,reject
+   );
+
+   reject.onclick=()=>changeBookingStatus(
+    item.id,"rejected",accept,reject
+   );
 
    card.append(accept,reject);
+
   }
 
+
   // ASSIGN DRIVER
+
   if(d.status==="accepted"&&!d.driverId){
+
    const box=document.createElement("div");
    box.className="assignmentBox";
 
    const heading=document.createElement("h4");
    heading.textContent="🚘 Driver Assignment";
+
    box.appendChild(heading);
 
-   const matching=availableDrivers.filter(x=>x.vehicleType===d.vehicleType);
+   const matching=availableDrivers.filter(
+    x=>x.vehicleType===d.vehicleType
+   );
 
    if(!matching.length){
-    box.appendChild(line("তথ্য","এই ধরনের কোনো অনুমোদিত Online Driver পাওয়া যাচ্ছে না।"));
+
+    box.appendChild(
+     line(
+      "তথ্য",
+      "এই ধরনের কোনো অনুমোদিত Online Driver পাওয়া যাচ্ছে না।"
+     )
+    );
+
    }else{
+
     const select=document.createElement("select");
+
     const first=document.createElement("option");
     first.value="";
     first.textContent="Online Driver নির্বাচন করুন";
+
     select.appendChild(first);
 
     matching.forEach(driver=>{
+
      const option=document.createElement("option");
      option.value=driver.uid;
-     option.textContent=driver.name+" | "+driver.phone;
+     option.textContent=
+      driver.name+" | "+driver.phone;
+
      select.appendChild(option);
+
     });
 
     const assign=document.createElement("button");
@@ -527,60 +937,90 @@ function renderRideBookings(docs){
     assign.className="assignBtn";
     assign.disabled=true;
 
-    select.onchange=()=>assign.disabled=!select.value;
-    assign.onclick=()=>assignDriver(item.id,select.value,assign,select);
+    select.onchange=()=>{
+     assign.disabled=!select.value;
+    };
+
+    assign.onclick=()=>assignDriver(
+     item.id,select.value,assign,select
+    );
 
     box.append(select,assign);
+
    }
 
    card.appendChild(box);
+
   }
 
+
   // ADMIN MARKS RIDE COMPLETED
+
   if(d.status==="accepted"&&d.driverId){
+
    const complete=document.createElement("button");
    complete.textContent="Mark Completed";
    complete.className="completeBtn";
 
    complete.onclick=async()=>{
+
     if(!confirm(
      "এই Ride কি সত্যিই সম্পন্ন হয়েছে?\n\n"+
      "ভাড়া: ৳"+(d.estimatedFare||0)+
-     "\nAdmin-এর ১% কমিশন: ৳"+money(Number(d.estimatedFare||0)*COMMISSION_RATE)
+     "\nAdmin-এর ১% কমিশন: ৳"+
+     money(Number(d.estimatedFare||0)*COMMISSION_RATE)
     ))return;
 
     complete.disabled=true;
 
     try{
-     await updateDoc(doc(db,"rideBookings",item.id),{
-      status:"completed"
-     });
+
+     await updateDoc(
+      doc(db,"rideBookings",item.id),
+      {
+       status:"completed"
+      }
+     );
 
      alert("Ride Completed হয়েছে। ১% কমিশন হিসাবে যুক্ত হয়েছে।");
+
     }catch(error){
+
      console.error(error);
+
      alert("Completed করা যায়নি: "+error.code);
      complete.disabled=false;
+
     }
+
    };
 
    card.appendChild(complete);
+
   }
 
   $("rideBookings").appendChild(card);
+
  });
+
 }
+
 
 // ASSIGN DRIVER
 
 async function assignDriver(bookingId,driverId,button,select){
+
  if(!auth.currentUser||!driverId)return;
 
- const driver=availableDrivers.find(x=>x.uid===driverId);
+ const driver=availableDrivers.find(
+  x=>x.uid===driverId
+ );
 
  if(!driver){
+
   alert("এই Driver এখন আর Online তালিকায় নেই।");
   return;
+
  }
 
  if(!confirm(driver.name+"-কে এই Ride Assign করতে চান?"))return;
@@ -589,70 +1029,120 @@ async function assignDriver(bookingId,driverId,button,select){
  select.disabled=true;
 
  try{
-  await updateDoc(doc(db,"rideBookings",bookingId),{
-   driverId:driver.uid,
-   driverName:driver.name,
-   driverPhone:driver.phone,
-   assignedAt:serverTimestamp()
-  });
+
+  await updateDoc(
+   doc(db,"rideBookings",bookingId),
+   {
+    driverId:driver.uid,
+    driverName:driver.name,
+    driverPhone:driver.phone,
+    assignedAt:serverTimestamp()
+   }
+  );
 
   alert("Driver Assign হয়েছে। নাম ও মোবাইল নম্বর সংরক্ষিত হয়েছে।");
 
  }catch(error){
+
   console.error(error);
+
   alert("Driver Assign হয়নি: "+error.code);
+
   button.disabled=false;
   select.disabled=false;
+
  }
+
 }
+
 
 // ACCEPT OR REJECT BOOKING
 
 async function changeBookingStatus(id,status,accept,reject){
+
  if(!auth.currentUser)return;
 
- if(!confirm("Booking "+(status==="accepted"?"Accept":"Reject")+" করবেন?"))return;
+ if(!confirm(
+  "Booking "+(status==="accepted"?"Accept":"Reject")+" করবেন?"
+ ))return;
 
  accept.disabled=true;
  reject.disabled=true;
 
  try{
-  await updateDoc(doc(db,"rideBookings",id),{status});
-  alert(status==="accepted"?"Booking Accept হয়েছে।":"Booking Reject হয়েছে।");
+
+  await updateDoc(
+   doc(db,"rideBookings",id),
+   {status}
+  );
+
+  alert(
+   status==="accepted"?
+   "Booking Accept হয়েছে।":
+   "Booking Reject হয়েছে।"
+  );
+
  }catch(error){
+
   console.error(error);
+
   alert("Booking পরিবর্তন হয়নি: "+error.code);
+
   accept.disabled=false;
   reject.disabled=false;
+
  }
+
 }
+
 
 // REVIEW DRIVER APPLICATION
 
 async function reviewApplication(id,status,approve,reject){
+
  if(!auth.currentUser)return;
 
- if(!confirm(status==="approved"?"এই Driver-কে Approve করবেন?":"এই আবেদন Reject করবেন?"))return;
+ if(!confirm(
+  status==="approved"?
+  "এই Driver-কে Approve করবেন?":
+  "এই আবেদন Reject করবেন?"
+ ))return;
 
  approve.disabled=true;
  reject.disabled=true;
 
  try{
-  await updateDoc(doc(db,"driverApplications",id),{
-   status,
-   reviewedBy:auth.currentUser.uid,
-   reviewedAt:serverTimestamp()
-  });
 
-  alert(status==="approved"?"Driver Approve হয়েছে।":"আবেদন Reject হয়েছে।");
+  await updateDoc(
+   doc(db,"driverApplications",id),
+   {
+    status,
+    reviewedBy:auth.currentUser.uid,
+    reviewedAt:serverTimestamp()
+   }
+  );
+
+  alert(
+   status==="approved"?
+   "Driver Approve হয়েছে।":
+   "আবেদন Reject হয়েছে।"
+  );
 
  }catch(error){
+
   console.error(error);
+
   alert("পরিবর্তন করা যায়নি: "+error.code);
+
   approve.disabled=false;
   reject.disabled=false;
+
  }
+
 }
+
+
+// LOGOUT
 
 $("logoutBtn").onclick=()=>signOut(auth);
 
