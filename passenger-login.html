@@ -51,6 +51,9 @@ button{
  cursor:pointer;
 }
 button:disabled{opacity:.5}
+.reset-btn{
+ background:#16804a;
+}
 #message{
  overflow-wrap:anywhere;
  font-weight:bold;
@@ -85,6 +88,10 @@ Passenger Login
 
 </form>
 
+<button id="resetBtn" class="reset-btn" type="button">
+Forgot Password? নতুন Password তৈরি করুন
+</button>
+
 <p id="message"></p>
 
 <p>নতুন অ্যাকাউন্ট খুলতে
@@ -101,7 +108,9 @@ from "https://www.gstatic.com/firebasejs/12.0.0/firebase-app.js";
 
 import {
 getAuth,
-signInWithEmailAndPassword
+signInWithEmailAndPassword,
+sendPasswordResetEmail,
+signOut
 } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-auth.js";
 
 import {
@@ -125,18 +134,22 @@ const db=getFirestore(app);
 
 const form=document.getElementById("loginForm");
 const message=document.getElementById("message");
-const button=document.getElementById("loginBtn");
+const loginBtn=document.getElementById("loginBtn");
+const resetBtn=document.getElementById("resetBtn");
+const emailInput=document.getElementById("email");
 
+
+// PASSENGER LOGIN
 form.addEventListener("submit",async(e)=>{
 
 e.preventDefault();
 message.textContent="";
 
-const email=document.getElementById("email").value.trim();
+const email=emailInput.value.trim();
 const password=document.getElementById("password").value;
 
-button.disabled=true;
-button.textContent="Login হচ্ছে...";
+loginBtn.disabled=true;
+loginBtn.textContent="Login হচ্ছে...";
 
 try{
 
@@ -152,8 +165,7 @@ const profileSnap=await getDoc(profileRef);
 if(!profileSnap.exists() ||
 profileSnap.data().role!=="passenger"){
 
-await auth.signOut();
-
+await signOut(auth);
 throw new Error("not-passenger");
 }
 
@@ -182,8 +194,60 @@ errors[error.code] ||
 
 }finally{
 
-button.disabled=false;
-button.textContent="Passenger Login";
+loginBtn.disabled=false;
+loginBtn.textContent="Passenger Login";
+
+}
+
+});
+
+
+// FORGOT PASSWORD
+resetBtn.addEventListener("click",async()=>{
+
+message.textContent="";
+
+const email=emailInput.value.trim();
+
+if(!email){
+message.style.color="#b42318";
+message.textContent="প্রথমে আপনার Gmail লিখুন।";
+emailInput.focus();
+return;
+}
+
+resetBtn.disabled=true;
+resetBtn.textContent="Reset Link পাঠানো হচ্ছে...";
+
+try{
+
+await sendPasswordResetEmail(auth,email);
+
+message.style.color="green";
+message.textContent=
+"Password Reset লিংক আপনার Gmail-এ পাঠানো হয়েছে। Gmail Inbox অথবা Spam ফোল্ডার দেখুন।";
+
+}catch(error){
+
+console.error("Password Reset Error:",error);
+
+message.style.color="#b42318";
+
+const errors={
+"auth/invalid-email":"Gmail ঠিক নয়।",
+"auth/user-not-found":"এই Gmail দিয়ে অ্যাকাউন্ট পাওয়া যায়নি।",
+"auth/network-request-failed":"ইন্টারনেট সংযোগ পরীক্ষা করুন।",
+"auth/too-many-requests":"অনেকবার চেষ্টা হয়েছে। কিছুক্ষণ পরে আবার চেষ্টা করুন।"
+};
+
+message.textContent=
+errors[error.code] ||
+"Reset করতে সমস্যা হয়েছে: "+error.code;
+
+}finally{
+
+resetBtn.disabled=false;
+resetBtn.textContent="Forgot Password? নতুন Password তৈরি করুন";
 
 }
 
