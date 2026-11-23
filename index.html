@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="bn">
 <head>
@@ -14,7 +15,7 @@ input,select{width:100%;padding:13px;margin:10px 0;border:1px solid #ccc;border-
 button{padding:12px 18px;background:#123b70;color:white;border:0;border-radius:7px;margin:5px;cursor:pointer}
 button:disabled{opacity:.5;cursor:not-allowed}
 .offlineBtn,.rejectBtn{background:#b42318}
-.approveBtn,.assignBtn{background:#087443}
+.approveBtn,.assignBtn,.completeBtn{background:#087443}
 #dashboard{display:none}
 #message{color:#b42318}
 .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px}
@@ -25,6 +26,7 @@ button:disabled{opacity:.5;cursor:not-allowed}
 .pending{color:#a15c00;font-weight:bold}
 .lastUpdate{color:#475569;font-size:14px}
 .assignmentBox{background:#f1f5f9;border-radius:8px;padding:12px;margin-top:12px}
+.commissionBox{background:#e8f5e9;padding:12px;border-radius:8px;margin-top:12px}
 </style>
 </head>
 <body>
@@ -65,7 +67,7 @@ button:disabled{opacity:.5;cursor:not-allowed}
 </div>
 <div class="card">
 <h3>Commission</h3>
-<p>প্রতি Completed Ride-এ ৫%</p>
+<p>প্রতি Completed Ride-এ ১%</p>
 <p id="commissionInfo">লোড হচ্ছে...</p>
 </div>
 </div>
@@ -101,6 +103,8 @@ import {
  serverTimestamp,query,where,getDoc
 } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-firestore.js";
 
+const COMMISSION_RATE=0.01;
+
 const app=initializeApp({
  apiKey:"AIzaSyBVzdXw-nO8ixDqxbGhTj3lbBX37XUMCr4",
  authDomain:"blazing-way.firebaseapp.com",
@@ -122,6 +126,10 @@ let availableDrivers=[];
 let latestBookingDocs=[];
 let presenceVersion=0;
 let migratingBookings=new Set();
+
+function money(value){
+ return Number(value||0).toFixed(2);
+}
 
 $("loginBtn").onclick=async()=>{
  $("message").textContent="";
@@ -184,6 +192,8 @@ onAuthStateChanged(auth,async user=>{
  }
 });
 
+// DRIVER APPLICATIONS
+
 function loadApplications(){
  $("applications").textContent="আবেদন লোড হচ্ছে...";
 
@@ -243,6 +253,8 @@ function loadApplications(){
   $("applications").textContent="আবেদন লোড হয়নি। Rules পরীক্ষা করুন।";
  });
 }
+
+// ONLINE DRIVERS
 
 function loadOnlineDrivers(){
  $("onlineDrivers").textContent="চালকদের তথ্য লোড হচ্ছে...";
@@ -344,6 +356,8 @@ function loadOnlineDrivers(){
  });
 }
 
+// RIDE BOOKINGS
+
 function loadRideBookings(){
  $("rideBookings").textContent="বুকিং লোড হচ্ছে...";
 
@@ -355,6 +369,8 @@ function loadRideBookings(){
   $("rideBookings").textContent="বুকিং লোড হয়নি। Rules পরীক্ষা করুন।";
  });
 }
+
+// OLD BOOKING DRIVER DETAILS
 
 async function migrateOldBooking(item,data){
  if(!data.driverId)return;
@@ -380,25 +396,28 @@ async function migrateOldBooking(item,data){
  }
 }
 
+// RENDER BOOKINGS AND COMMISSION
+
 function renderRideBookings(docs){
  $("rideBookings").replaceChildren();
 
  const total=docs.length;
  const pending=docs.filter(x=>x.data().status==="pending").length;
+ const completed=docs.filter(x=>x.data().status==="completed");
 
  $("bookingCount").textContent="মোট বুকিং: "+total+" | Pending: "+pending;
  $("rideCount").textContent="মোট বুকিং: "+total+" | Pending: "+pending;
 
  let commission=0;
 
- docs.forEach(item=>{
+ completed.forEach(item=>{
   const d=item.data();
-  if(d.status==="completed"){
-   commission+=Number(d.estimatedFare||0)*0.05;
-  }
+  commission+=Number(d.estimatedFare||0)*COMMISSION_RATE;
  });
 
- $("commissionInfo").textContent="Completed Ride-এর ৫%: ৳"+Math.round(commission);
+ $("commissionInfo").textContent=
+  "Completed Ride: "+completed.length+
+  " | মোট ১% কমিশন: ৳"+money(commission);
 
  if(!total){
   $("rideBookings").textContent="এখনো কোনো Booking নেই।";
@@ -452,6 +471,16 @@ function renderRideBookings(docs){
    );
   }
 
+  // COMPLETED RIDE COMMISSION
+  if(d.status==="completed"){
+   const amount=Number(d.estimatedFare||0)*COMMISSION_RATE;
+   const box=document.createElement("div");
+   box.className="commissionBox";
+   box.textContent="এই Ride-এর ১% কমিশন: ৳"+money(amount);
+   card.appendChild(box);
+  }
+
+  // ACCEPT OR REJECT PENDING BOOKING
   if(d.status==="pending"){
    const accept=document.createElement("button");
    accept.textContent="Accept Booking";
@@ -467,6 +496,7 @@ function renderRideBookings(docs){
    card.append(accept,reject);
   }
 
+  // ASSIGN DRIVER
   if(d.status==="accepted"&&!d.driverId){
    const box=document.createElement("div");
    box.className="assignmentBox";
@@ -507,9 +537,42 @@ function renderRideBookings(docs){
    card.appendChild(box);
   }
 
+  // ADMIN MARKS RIDE COMPLETED
+  if(d.status==="accepted"&&d.driverId){
+   const complete=document.createElement("button");
+   complete.textContent="Mark Completed";
+   complete.className="completeBtn";
+
+   complete.onclick=async()=>{
+    if(!confirm(
+     "এই Ride কি সত্যিই সম্পন্ন হয়েছে?\n\n"+
+     "ভাড়া: ৳"+(d.estimatedFare||0)+
+     "\nAdmin-এর ১% কমিশন: ৳"+money(Number(d.estimatedFare||0)*COMMISSION_RATE)
+    ))return;
+
+    complete.disabled=true;
+
+    try{
+     await updateDoc(doc(db,"rideBookings",item.id),{
+      status:"completed"
+     });
+
+     alert("Ride Completed হয়েছে। ১% কমিশন হিসাবে যুক্ত হয়েছে।");
+    }catch(error){
+     console.error(error);
+     alert("Completed করা যায়নি: "+error.code);
+     complete.disabled=false;
+    }
+   };
+
+   card.appendChild(complete);
+  }
+
   $("rideBookings").appendChild(card);
  });
 }
+
+// ASSIGN DRIVER
 
 async function assignDriver(bookingId,driverId,button,select){
  if(!auth.currentUser||!driverId)return;
@@ -544,6 +607,8 @@ async function assignDriver(bookingId,driverId,button,select){
  }
 }
 
+// ACCEPT OR REJECT BOOKING
+
 async function changeBookingStatus(id,status,accept,reject){
  if(!auth.currentUser)return;
 
@@ -562,6 +627,8 @@ async function changeBookingStatus(id,status,accept,reject){
   reject.disabled=false;
  }
 }
+
+// REVIEW DRIVER APPLICATION
 
 async function reviewApplication(id,status,approve,reject){
  if(!auth.currentUser)return;
@@ -589,6 +656,7 @@ async function reviewApplication(id,status,approve,reject){
 }
 
 $("logoutBtn").onclick=()=>signOut(auth);
+
 </script>
 </body>
 </html>
