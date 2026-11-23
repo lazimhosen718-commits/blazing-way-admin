@@ -4,37 +4,86 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>BLAZING-WAY Driver Login</title>
+<title>BLAZING-WAY Driver Dashboard</title>
+
 <style>
 *{box-sizing:border-box}
-body{margin:0;font-family:Arial;background:#eef2f7;color:#172554}
-header{background:#123b70;color:white;text-align:center;padding:20px}
-main{max-width:500px;margin:25px auto;padding:15px}
-.card{background:white;padding:22px;border-radius:12px;box-shadow:0 3px 12px #ddd}
-input{width:100%;padding:13px;margin:10px 0;border:1px solid #ccc;border-radius:7px}
-button{background:#123b70;color:white;border:0;padding:13px;border-radius:7px;width:100%;margin-top:12px}
+body{
+ margin:0;
+ font-family:Arial,sans-serif;
+ background:#eef2f7;
+ color:#172554;
+}
+header{
+ background:#123b70;
+ color:white;
+ text-align:center;
+ padding:20px;
+}
+main{
+ max-width:650px;
+ margin:25px auto;
+ padding:15px;
+}
+.card{
+ background:white;
+ padding:22px;
+ border-radius:12px;
+ box-shadow:0 3px 12px #ddd;
+ margin-bottom:18px;
+}
+input{
+ width:100%;
+ padding:13px;
+ margin:10px 0;
+ border:1px solid #ccc;
+ border-radius:7px;
+}
+button{
+ background:#123b70;
+ color:white;
+ border:0;
+ padding:13px;
+ border-radius:7px;
+ width:100%;
+ margin-top:12px;
+ cursor:pointer;
+}
 button:disabled{opacity:.5}
 #result{margin-top:18px;line-height:1.7;overflow-wrap:anywhere}
-.approved{color:green;font-weight:bold}
+.approved,.online{color:green;font-weight:bold}
 .pending{color:#a15c00;font-weight:bold}
 .rejected{color:#b42318;font-weight:bold}
-.online{color:green;font-weight:bold}
 .offline{color:#b42318;font-weight:bold}
+.ride{
+ border:1px solid #cbd5e1;
+ border-radius:10px;
+ padding:15px;
+ margin:12px 0;
+ overflow-wrap:anywhere;
+}
+.acceptBtn{background:#087443}
+.rejectBtn{background:#b42318}
+.ride p{line-height:1.5}
 a{color:#123b70}
 </style>
 </head>
+
 <body>
 
 <header>
 <h1>BLAZING-WAY</h1>
-<p>Driver Login</p>
+<p>Driver Dashboard</p>
 </header>
 
 <main>
+
 <div class="card">
+
 <h2>চালক Login</h2>
 
 <form id="loginForm">
+
 <label>Gmail</label>
 <input id="email" type="email" required>
 
@@ -42,6 +91,7 @@ a{color:#123b70}
 <input id="password" type="password" required>
 
 <button id="loginBtn" type="submit">Login</button>
+
 </form>
 
 <div id="result"></div>
@@ -50,36 +100,55 @@ a{color:#123b70}
 <button id="logoutBtn" hidden>Logout</button>
 
 <p><a href="driver-register.html">নতুন চালক নিবন্ধন</a></p>
+
 </div>
+
+<div class="card" id="rideSection" hidden>
+
+<h2>🚕 আমার Assigned Rides</h2>
+
+<p>Admin আপনাকে যে রাইড Assign করেছেন, এখানে দেখতে পাবেন।</p>
+
+<div id="assignedRides">রাইড লোড হচ্ছে...</div>
+
+</div>
+
 </main>
 
 <script type="module">
 
-import {initializeApp} from "https://www.gstatic.com/firebasejs/12.0.0/firebase-app.js";
+import {initializeApp}
+from "https://www.gstatic.com/firebasejs/12.0.0/firebase-app.js";
 
 import {
-getAuth,
-signInWithEmailAndPassword,
-onAuthStateChanged,
-signOut
+ getAuth,
+ signInWithEmailAndPassword,
+ onAuthStateChanged,
+ signOut
 } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-auth.js";
 
 import {
-getFirestore,
-doc,
-getDoc,
-setDoc,
-updateDoc,
-serverTimestamp
+ getFirestore,
+ doc,
+ getDoc,
+ setDoc,
+ updateDoc,
+ serverTimestamp,
+ collection,
+ query,
+ where,
+ onSnapshot,
+ deleteField
 } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-firestore.js";
 
+
 const app=initializeApp({
-apiKey:"AIzaSyAV6za_TROkL0lSzdEPIWbMfRh00NR21KE",
-authDomain:"blazing-way.firebaseapp.com",
-projectId:"blazing-way",
-storageBucket:"blazing-way.firebasestorage.app",
-messagingSenderId:"100523779075",
-appId:"1:100523779075:web:732df54a1b0565f02e1a36"
+ apiKey:"AIzaSyAV6za_TROkL0lSzdEPIWbMfRh00NR21KE",
+ authDomain:"blazing-way.firebaseapp.com",
+ projectId:"blazing-way",
+ storageBucket:"blazing-way.firebasestorage.app",
+ messagingSenderId:"100523779075",
+ appId:"1:100523779075:web:732df54a1b0565f02e1a36"
 });
 
 const auth=getAuth(app);
@@ -90,204 +159,485 @@ const result=document.getElementById("result");
 const loginBtn=document.getElementById("loginBtn");
 const logoutBtn=document.getElementById("logoutBtn");
 const onlineBtn=document.getElementById("onlineBtn");
+const rideSection=document.getElementById("rideSection");
+const assignedRides=document.getElementById("assignedRides");
 
 let currentDriver=null;
 let currentOnline=false;
 let busy=false;
+let stopAssignedRides=null;
 
-function showMessage(text,className=""){
-result.replaceChildren();
-const p=document.createElement("p");
-p.className=className;
-p.textContent=text;
-result.appendChild(p);
+
+// MESSAGE
+
+function showMessage(message,className=""){
+
+ result.replaceChildren();
+
+ const p=document.createElement("p");
+ p.className=className;
+ p.textContent=message;
+
+ result.appendChild(p);
+
 }
+
+
+// CHECK DRIVER
 
 async function checkDriver(user){
 
-currentDriver=null;
-form.hidden=true;
-logoutBtn.hidden=false;
-onlineBtn.hidden=true;
+ currentDriver=null;
 
-showMessage("আবেদনের অবস্থা যাচাই হচ্ছে...");
+ form.hidden=true;
+ logoutBtn.hidden=false;
+ onlineBtn.hidden=true;
+ rideSection.hidden=true;
 
-try{
+ showMessage("আবেদনের অবস্থা যাচাই হচ্ছে...");
 
-const applicationRef=doc(db,"driverApplications",user.uid);
-const applicationSnap=await getDoc(applicationRef);
+ try{
 
-if(!applicationSnap.exists()){
-showMessage("এই অ্যাকাউন্টে চালকের আবেদন পাওয়া যায়নি।");
-return;
+  const applicationRef=doc(
+   db,"driverApplications",user.uid
+  );
+
+  const applicationSnap=await getDoc(applicationRef);
+
+  if(!applicationSnap.exists()){
+
+   showMessage("এই অ্যাকাউন্টে চালকের আবেদন পাওয়া যায়নি।");
+   return;
+
+  }
+
+  const data=applicationSnap.data();
+
+  if(data.status==="pending"){
+
+   showMessage(
+    "আপনার আবেদন Pending। Admin অনুমোদনের জন্য অপেক্ষা করুন।",
+    "pending"
+   );
+
+   return;
+
+  }
+
+  if(data.status==="rejected"){
+
+   showMessage(
+    "আপনার আবেদন অনুমোদিত হয়নি। Admin-এর সঙ্গে যোগাযোগ করুন।",
+    "rejected"
+   );
+
+   return;
+
+  }
+
+  if(data.status!=="approved"){
+
+   showMessage("আবেদনের অবস্থা সঠিক নয়।");
+   return;
+
+  }
+
+  currentDriver=user;
+
+  const presenceRef=doc(
+   db,"driverPresence",user.uid
+  );
+
+  const presenceSnap=await getDoc(presenceRef);
+
+  currentOnline=presenceSnap.exists()
+   && presenceSnap.data().online===true;
+
+  const title=document.createElement("h3");
+  title.className="approved";
+  title.textContent="আপনার আবেদন অনুমোদিত হয়েছে!";
+
+  const info=document.createElement("p");
+
+  info.textContent=
+   "স্বাগতম, "+(data.fullName||"চালক")+
+   "। গাড়ির ধরন: "+
+   (data.vehicleType==="bike"?"Bike":"Private Car");
+
+  result.replaceChildren(title,info);
+
+  onlineBtn.hidden=false;
+
+  updateOnlineDisplay();
+
+  rideSection.hidden=false;
+
+  loadAssignedRides(user);
+
+ }catch(error){
+
+  console.error(error);
+
+  currentDriver=null;
+  onlineBtn.hidden=true;
+
+  showMessage(
+   "আবেদনের অবস্থা যাচাই করা যায়নি। Error: "+error.code
+  );
+
+ }
+
 }
 
-const data=applicationSnap.data();
 
-if(data.status==="pending"){
-showMessage("আপনার আবেদন এখনো Pending। Admin অনুমোদনের জন্য অপেক্ষা করুন।","pending");
-return;
-}
-
-if(data.status==="rejected"){
-showMessage("আপনার আবেদন অনুমোদিত হয়নি। Admin-এর সঙ্গে যোগাযোগ করুন।","rejected");
-return;
-}
-
-if(data.status!=="approved"){
-showMessage("আবেদনের অবস্থা সঠিক নয়। Admin-এর সঙ্গে যোগাযোগ করুন।");
-return;
-}
-
-currentDriver=user;
-
-const presenceRef=doc(db,"driverPresence",user.uid);
-const presenceSnap=await getDoc(presenceRef);
-
-currentOnline=presenceSnap.exists()
-&& presenceSnap.data().online===true;
-
-const title=document.createElement("h3");
-title.className="approved";
-title.textContent="আপনার আবেদন অনুমোদিত হয়েছে!";
-
-const info=document.createElement("p");
-info.textContent="স্বাগতম, "+(data.fullName || "চালক")+
-"। গাড়ির ধরন: "+(data.vehicleType==="bike"?"Bike":"Private Car");
-
-result.replaceChildren(title,info);
-
-onlineBtn.hidden=false;
-updateOnlineDisplay();
-
-}catch(error){
-
-console.error(error);
-currentDriver=null;
-onlineBtn.hidden=true;
-showMessage("আবেদনের অবস্থা যাচাই করা যায়নি। আবার চেষ্টা করুন।");
-
-}
-
-}
+// ONLINE DISPLAY
 
 function updateOnlineDisplay(){
 
-if(currentOnline){
+ if(currentOnline){
 
-showMessage("আপনি এখন ONLINE আছেন।","online");
-onlineBtn.textContent="Offline হোন";
+  showMessage("আপনি এখন ONLINE আছেন।","online");
+  onlineBtn.textContent="Offline হোন";
 
-}else{
+ }else{
 
-showMessage("আপনি এখন OFFLINE আছেন।","offline");
-onlineBtn.textContent="Online হোন";
+  showMessage("আপনি এখন OFFLINE আছেন।","offline");
+  onlineBtn.textContent="Online হোন";
+
+ }
 
 }
 
-}
+
+// ONLINE / OFFLINE
 
 onlineBtn.onclick=async()=>{
 
-if(!currentDriver || busy)return;
+ if(!currentDriver||busy)return;
 
-busy=true;
-onlineBtn.disabled=true;
+ busy=true;
+ onlineBtn.disabled=true;
 
-try{
+ try{
 
-const ref=doc(db,"driverPresence",currentDriver.uid);
-const snap=await getDoc(ref);
+  const ref=doc(
+   db,"driverPresence",currentDriver.uid
+  );
 
-const newStatus=!currentOnline;
+  const snap=await getDoc(ref);
 
-if(snap.exists()){
+  const newStatus=!currentOnline;
 
-await updateDoc(ref,{
-online:newStatus,
-updatedAt:serverTimestamp()
-});
+  if(snap.exists()){
 
-}else{
+   await updateDoc(ref,{
+    online:newStatus,
+    updatedAt:serverTimestamp()
+   });
 
-await setDoc(ref,{
-uid:currentDriver.uid,
-online:newStatus,
-updatedAt:serverTimestamp()
-});
+  }else{
 
-}
+   await setDoc(ref,{
+    uid:currentDriver.uid,
+    online:newStatus,
+    updatedAt:serverTimestamp()
+   });
 
-currentOnline=newStatus;
-updateOnlineDisplay();
+  }
 
-}catch(error){
+  currentOnline=newStatus;
+  updateOnlineDisplay();
 
-console.error(error);
-showMessage("Status পরিবর্তন করা যায়নি। Firebase Rules পরীক্ষা করুন।");
+ }catch(error){
 
-}finally{
+  console.error(error);
 
-busy=false;
-onlineBtn.disabled=false;
+  showMessage(
+   "Status পরিবর্তন করা যায়নি। Error: "+error.code
+  );
 
-}
+ }finally{
+
+  busy=false;
+  onlineBtn.disabled=false;
+
+ }
 
 };
 
-form.addEventListener("submit",async(event)=>{
 
-event.preventDefault();
+// LOAD ASSIGNED RIDES
 
-result.textContent="";
-loginBtn.disabled=true;
+function loadAssignedRides(user){
 
-try{
+ if(stopAssignedRides){
 
-const email=document.getElementById("email").value.trim();
-const password=document.getElementById("password").value;
+  stopAssignedRides();
+  stopAssignedRides=null;
 
-const credential=await signInWithEmailAndPassword(
-auth,email,password
-);
+ }
 
-await checkDriver(credential.user);
+ assignedRides.textContent="Assigned Ride লোড হচ্ছে...";
 
-}catch(error){
+ const rideQuery=query(
+  collection(db,"rideBookings"),
+  where("driverId","==",user.uid)
+ );
 
-console.error(error);
-showMessage("Login হয়নি। Gmail ও Password পরীক্ষা করুন।");
+ stopAssignedRides=onSnapshot(
+  rideQuery,
 
-}finally{
+  snapshot=>{
 
-loginBtn.disabled=false;
+   assignedRides.replaceChildren();
+
+   if(snapshot.empty){
+
+    assignedRides.textContent=
+     "এখনো আপনাকে কোনো Ride Assign করা হয়নি।";
+
+    return;
+
+   }
+
+   snapshot.forEach(item=>{
+
+    const data=item.data();
+
+    const card=document.createElement("div");
+    card.className="ride";
+
+    const title=document.createElement("h3");
+    title.textContent="🚕 নতুন Ride";
+
+    const pickup=document.createElement("p");
+    pickup.textContent="Pickup: "+(data.pickup||"নেই");
+
+    const destination=document.createElement("p");
+    destination.textContent=
+     "Destination: "+(data.destination||"নেই");
+
+    const vehicle=document.createElement("p");
+    vehicle.textContent=
+     "যানবাহন: "+
+     (data.vehicleType==="bike"?"Bike":"Private Car");
+
+    const distance=document.createElement("p");
+    distance.textContent=
+     "দূরত্ব: "+(data.distanceKm||0)+" কিমি";
+
+    const fare=document.createElement("p");
+    fare.textContent=
+     "ভাড়া: ৳"+(data.estimatedFare||0);
+
+    const status=document.createElement("p");
+    status.textContent="Booking Status: "+(data.status||"unknown");
+
+    card.append(
+     title,pickup,destination,vehicle,distance,fare,status
+    );
+
+    if(data.driverResponse==="accepted"){
+
+     const accepted=document.createElement("p");
+     accepted.className="approved";
+     accepted.textContent="আপনি এই Ride Accept করেছেন।";
+
+     card.appendChild(accepted);
+
+    }else{
+
+     const accept=document.createElement("button");
+     accept.className="acceptBtn";
+     accept.textContent="Accept Ride";
+
+     const reject=document.createElement("button");
+     reject.className="rejectBtn";
+     reject.textContent="Reject Ride";
+
+     accept.onclick=()=>respondToRide(
+      item.id,"accepted",accept,reject
+     );
+
+     reject.onclick=()=>respondToRide(
+      item.id,"rejected",accept,reject
+     );
+
+     card.append(accept,reject);
+
+    }
+
+    assignedRides.appendChild(card);
+
+   });
+
+  },
+
+  error=>{
+
+   console.error("Assigned Ride Error:",error);
+
+   assignedRides.textContent=
+    "Ride লোড হয়নি। Firestore Rules পরীক্ষা করুন। Error: "+
+    error.code;
+
+  }
+
+ );
 
 }
 
+
+// ACCEPT / REJECT RIDE
+
+async function respondToRide(id,response,accept,reject){
+
+ if(!currentDriver)return;
+
+ const action=response==="accepted"?"Accept":"Reject";
+
+ if(!confirm("আপনি কি এই Ride "+action+" করতে চান?"))return;
+
+ accept.disabled=true;
+ reject.disabled=true;
+
+ try{
+
+  const rideRef=doc(db,"rideBookings",id);
+
+  if(response==="accepted"){
+
+   await updateDoc(rideRef,{
+
+    driverResponse:"accepted",
+    driverRespondedAt:serverTimestamp()
+
+   });
+
+   alert("আপনি সফলভাবে Ride Accept করেছেন।");
+
+  }else{
+
+   await updateDoc(rideRef,{
+
+    driverId:deleteField(),
+    assignedAt:deleteField(),
+    driverResponse:"rejected",
+    driverRespondedAt:serverTimestamp()
+
+   });
+
+   alert(
+    "আপনি Ride Reject করেছেন। এটি Admin-এর কাছে পুনরায় Assign করার জন্য উন্মুক্ত হয়েছে।"
+   );
+
+  }
+
+ }catch(error){
+
+  console.error("Ride Response Error:",error);
+
+  alert(
+   "পরিবর্তন করা যায়নি। Error: "+error.code+
+   "। Firestore Rules পরীক্ষা করুন।"
+  );
+
+  accept.disabled=false;
+  reject.disabled=false;
+
+ }
+
+}
+
+
+// LOGIN
+
+form.addEventListener("submit",async event=>{
+
+ event.preventDefault();
+
+ result.textContent="";
+ loginBtn.disabled=true;
+
+ try{
+
+  const email=document.getElementById("email").value.trim();
+  const password=document.getElementById("password").value;
+
+  await signInWithEmailAndPassword(auth,email,password);
+
+ }catch(error){
+
+  console.error(error);
+
+  showMessage(
+   "Login হয়নি। Gmail ও Password পরীক্ষা করুন।"
+  );
+
+ }finally{
+
+  loginBtn.disabled=false;
+
+ }
+
 });
+
+
+// AUTH CHECK
 
 onAuthStateChanged(auth,user=>{
 
-if(!user){
+ if(user){
 
-currentDriver=null;
-currentOnline=false;
-form.hidden=false;
-logoutBtn.hidden=true;
-onlineBtn.hidden=true;
-result.textContent="";
+  if(!currentDriver||currentDriver.uid!==user.uid){
 
-}
+   checkDriver(user);
+
+  }
+
+ }else{
+
+  if(stopAssignedRides){
+
+   stopAssignedRides();
+   stopAssignedRides=null;
+
+  }
+
+  currentDriver=null;
+  currentOnline=false;
+
+  form.hidden=false;
+  logoutBtn.hidden=true;
+  onlineBtn.hidden=true;
+  rideSection.hidden=true;
+
+  result.textContent="";
+  assignedRides.textContent="";
+
+ }
 
 });
 
+
+// LOGOUT
+
 logoutBtn.onclick=async()=>{
 
-await signOut(auth);
-form.reset();
+ if(stopAssignedRides){
+
+  stopAssignedRides();
+  stopAssignedRides=null;
+
+ }
+
+ await signOut(auth);
+
+ form.reset();
 
 };
 
 </script>
+
 </body>
 </html>
