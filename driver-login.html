@@ -8,101 +8,34 @@
 
 <style>
 *{box-sizing:border-box}
-body{
- margin:0;
- font-family:Arial,sans-serif;
- background:#eef2f7;
- color:#172554;
-}
-header{
- background:#123b70;
- color:white;
- text-align:center;
- padding:20px;
-}
-main{
- max-width:650px;
- margin:25px auto;
- padding:15px;
-}
-.card{
- background:white;
- padding:22px;
- border-radius:12px;
- box-shadow:0 3px 12px #ddd;
- margin-bottom:18px;
-}
-input{
- width:100%;
- padding:13px;
- margin:10px 0;
- border:1px solid #ccc;
- border-radius:7px;
-}
-button{
- background:#123b70;
- color:white;
- border:0;
- padding:13px;
- border-radius:7px;
- width:100%;
- margin-top:12px;
- cursor:pointer;
-}
+body{margin:0;font-family:Arial,sans-serif;background:#eef2f7;color:#172554}
+header{background:#123b70;color:white;text-align:center;padding:20px}
+main{max-width:650px;margin:25px auto;padding:15px}
+.card{background:white;padding:22px;border-radius:12px;box-shadow:0 3px 12px #ddd;margin-bottom:18px}
+input{width:100%;padding:13px;margin:10px 0;border:1px solid #ccc;border-radius:7px}
+button{background:#123b70;color:white;border:0;padding:13px;border-radius:7px;width:100%;margin-top:12px;cursor:pointer}
 button:disabled{opacity:.5}
 #result{margin-top:18px;line-height:1.7;overflow-wrap:anywhere}
 .approved,.online,.completed{color:green;font-weight:bold}
 .pending{color:#a15c00;font-weight:bold}
 .rejected,.offline{color:#b42318;font-weight:bold}
-.ride{
- border:1px solid #cbd5e1;
- border-radius:10px;
- padding:15px;
- margin:12px 0;
- overflow-wrap:anywhere;
-}
+.ride{border:1px solid #cbd5e1;border-radius:10px;padding:15px;margin:12px 0;overflow-wrap:anywhere}
 .acceptBtn{background:#087443}
 .rejectBtn{background:#b42318}
 .ride p{line-height:1.5}
 a{color:#123b70}
-.earningsGrid{
- display:grid;
- grid-template-columns:repeat(2,minmax(0,1fr));
- gap:12px;
- margin-top:15px;
-}
-.earningItem{
- background:#f1f5f9;
- padding:15px;
- border-radius:9px;
-}
-.earningItem p{
- margin:0 0 8px;
- color:#475569;
- font-size:14px;
-}
-.earningItem h3{
- margin:0;
- font-size:22px;
- overflow-wrap:anywhere;
-}
-.driverIncome{
- color:#087443;
-}
-.commissionInfo{
- background:#fff7ed;
- padding:12px;
- border-radius:8px;
- margin-top:15px;
- line-height:1.6;
-}
-.rideIncome{
- background:#e8f5e9;
- border-radius:8px;
- padding:12px;
- margin-top:12px;
- line-height:1.7;
-}
+.earningsGrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-top:15px}
+.earningItem{background:#f1f5f9;padding:15px;border-radius:9px}
+.earningItem p{margin:0 0 8px;color:#475569;font-size:14px}
+.earningItem h3{margin:0;font-size:22px;overflow-wrap:anywhere}
+.driverIncome{color:#087443}
+.commissionInfo{background:#fff7ed;padding:12px;border-radius:8px;margin-top:15px;line-height:1.6}
+.rideIncome{background:#e8f5e9;border-radius:8px;padding:12px;margin-top:12px;line-height:1.7}
+.paymentDue{color:#b42318}
+.paymentPaid{color:#087443}
+.paymentRecord{border:1px solid #cbd5e1;border-radius:9px;padding:13px;margin:12px 0;line-height:1.7;overflow-wrap:anywhere}
+.paymentRecord h3{margin:0 0 8px}
+.paymentNote{background:#eff6ff;padding:12px;border-radius:8px;line-height:1.6}
 @media(max-width:380px){
  .earningsGrid{grid-template-columns:1fr}
 }
@@ -119,11 +52,9 @@ a{color:#123b70}
 <main>
 
 <div class="card">
-
 <h2>চালক Login</h2>
 
 <form id="loginForm">
-
 <label>Gmail</label>
 <input id="email" type="email" required>
 
@@ -131,7 +62,6 @@ a{color:#123b70}
 <input id="password" type="password" required>
 
 <button id="loginBtn" type="submit">Login</button>
-
 </form>
 
 <div id="result"></div>
@@ -140,7 +70,6 @@ a{color:#123b70}
 <button id="logoutBtn" hidden>Logout</button>
 
 <p><a href="driver-register.html">নতুন চালক নিবন্ধন</a></p>
-
 </div>
 
 <!-- DRIVER EARNINGS -->
@@ -152,35 +81,77 @@ a{color:#123b70}
 
 <div class="earningsGrid">
 
- <div class="earningItem">
-  <p>Completed Ride</p>
-  <h3 id="completedCount">০</h3>
- </div>
+<div class="earningItem">
+<p>Completed Ride</p>
+<h3 id="completedCount">০</h3>
+</div>
 
- <div class="earningItem">
-  <p>মোট Ride ভাড়া</p>
-  <h3 id="totalFare">৳০.০০</h3>
- </div>
+<div class="earningItem">
+<p>মোট Ride ভাড়া</p>
+<h3 id="totalFare">৳০.০০</h3>
+</div>
 
- <div class="earningItem">
-  <p>Admin কমিশন ১%</p>
-  <h3 id="totalCommission">৳০.০০</h3>
- </div>
+<div class="earningItem">
+<p>Admin কমিশন ১%</p>
+<h3 id="totalCommission">৳০.০০</h3>
+</div>
 
- <div class="earningItem">
-  <p>আপনার আয় ৯৯%</p>
-  <h3 class="driverIncome" id="driverEarnings">৳০.০০</h3>
- </div>
+<div class="earningItem">
+<p>আপনার মোট আয় ৯৯%</p>
+<h3 class="driverIncome" id="driverEarnings">৳০.০০</h3>
+</div>
 
 </div>
 
 <div class="commissionInfo">
- <strong>আয়ের হিসাব:</strong>
- <p id="earningsFormula">Completed Ride-এর হিসাব এখানে দেখা যাবে।</p>
+<strong>আয়ের হিসাব:</strong>
+<p id="earningsFormula">Completed Ride-এর হিসাব এখানে দেখা যাবে।</p>
 </div>
 
 </div>
 
+<!-- PAYMENT SUMMARY -->
+<div class="card" id="paymentSection" hidden>
+
+<h2>💳 আমার পেমেন্ট হিসাব</h2>
+
+<div class="earningsGrid">
+
+<div class="earningItem">
+<p>আপনার মোট আয়</p>
+<h3 id="paymentEarnings">৳০.০০</h3>
+</div>
+
+<div class="earningItem">
+<p>Admin পরিশোধ করেছেন</p>
+<h3 class="paymentPaid" id="paymentPaid">৳০.০০</h3>
+</div>
+
+<div class="earningItem">
+<p>আপনার বকেয়া</p>
+<h3 class="paymentDue" id="paymentDue">৳০.০০</h3>
+</div>
+
+</div>
+
+<div class="paymentNote">
+<p>এই হিসাব Completed Ride-এর ৯৯% আয় এবং Admin-এর রেকর্ড করা পেমেন্ট অনুযায়ী দেখানো হয়।</p>
+</div>
+
+</div>
+
+<!-- PAYMENT HISTORY -->
+<div class="card" id="paymentHistorySection" hidden>
+
+<h2>📋 Payment History</h2>
+
+<p>Admin আপনাকে যত টাকা পরিশোধ করেছেন, তার তালিকা এখানে দেখতে পাবেন।</p>
+
+<div id="paymentHistory">পেমেন্ট হিসাব লোড হচ্ছে...</div>
+
+</div>
+
+<!-- ASSIGNED RIDES -->
 <div class="card" id="rideSection" hidden>
 
 <h2>🚕 আমার Assigned Rides</h2>
@@ -243,11 +214,19 @@ const onlineBtn=document.getElementById("onlineBtn");
 const rideSection=document.getElementById("rideSection");
 const assignedRides=document.getElementById("assignedRides");
 const earningsSection=document.getElementById("earningsSection");
+const paymentSection=document.getElementById("paymentSection");
+const paymentHistorySection=document.getElementById("paymentHistorySection");
+const paymentHistory=document.getElementById("paymentHistory");
 
 let currentDriver=null;
 let currentOnline=false;
 let busy=false;
+
 let stopAssignedRides=null;
+let stopPaymentHistory=null;
+
+let currentDriverEarnings=0;
+let currentDriverPaid=0;
 
 
 // MONEY FORMAT
@@ -268,6 +247,62 @@ function showMessage(message,className=""){
  p.textContent=message;
 
  result.appendChild(p);
+
+}
+
+
+// DATE FORMAT
+
+function formatDate(timestamp){
+
+ if(!timestamp)return "তারিখ পাওয়া যায়নি";
+
+ try{
+
+  let date;
+
+  if(typeof timestamp.toDate==="function"){
+   date=timestamp.toDate();
+  }else{
+   date=new Date(timestamp);
+  }
+
+  if(isNaN(date.getTime()))return "তারিখ পাওয়া যায়নি";
+
+  return date.toLocaleString("bn-BD",{
+   year:"numeric",
+   month:"long",
+   day:"numeric",
+   hour:"2-digit",
+   minute:"2-digit"
+  });
+
+ }catch(error){
+
+  return "তারিখ পাওয়া যায়নি";
+
+ }
+
+}
+
+
+// UPDATE PAYMENT SUMMARY
+
+function updatePaymentSummary(){
+
+ const due=Math.max(
+  0,
+  Math.round((currentDriverEarnings-currentDriverPaid)*100)/100
+ );
+
+ document.getElementById("paymentEarnings").textContent=
+  "৳"+money(currentDriverEarnings);
+
+ document.getElementById("paymentPaid").textContent=
+  "৳"+money(currentDriverPaid);
+
+ document.getElementById("paymentDue").textContent=
+  "৳"+money(due);
 
 }
 
@@ -308,10 +343,11 @@ function updateEarnings(docs){
 
  });
 
- // Floating point rounding correction
  totalFare=Math.round(totalFare*100)/100;
  totalCommission=Math.round(totalCommission*100)/100;
  driverIncome=Math.round(driverIncome*100)/100;
+
+ currentDriverEarnings=driverIncome;
 
  document.getElementById("completedCount").textContent=
   completedCount.toLocaleString("bn-BD");
@@ -330,6 +366,112 @@ function updateEarnings(docs){
   " - Admin কমিশন ৳"+money(totalCommission)+
   " = আপনার আয় ৳"+money(driverIncome);
 
+ updatePaymentSummary();
+
+}
+
+
+// LOAD PAYMENT HISTORY
+
+function loadPaymentHistory(user){
+
+ if(stopPaymentHistory){
+  stopPaymentHistory();
+  stopPaymentHistory=null;
+ }
+
+ paymentHistory.textContent="পেমেন্ট হিসাব লোড হচ্ছে...";
+
+ currentDriverPaid=0;
+ updatePaymentSummary();
+
+ const paymentQuery=query(
+  collection(db,"driverPayments"),
+  where("driverId","==",user.uid)
+ );
+
+ stopPaymentHistory=onSnapshot(
+
+  paymentQuery,
+
+  snapshot=>{
+
+   paymentHistory.replaceChildren();
+
+   let totalPaid=0;
+
+   if(snapshot.empty){
+
+    currentDriverPaid=0;
+    updatePaymentSummary();
+
+    paymentHistory.textContent=
+     "এখনো Admin আপনার নামে কোনো পেমেন্ট রেকর্ড করেননি।";
+
+    return;
+
+   }
+
+   const records=snapshot.docs.slice().sort((a,b)=>{
+
+    const dateA=a.data().paidAt?.toMillis?.()||0;
+    const dateB=b.data().paidAt?.toMillis?.()||0;
+
+    return dateB-dateA;
+
+   });
+
+   records.forEach(item=>{
+
+    const data=item.data();
+
+    const amount=Number(data.amount||0);
+
+    totalPaid+=amount;
+
+    const card=document.createElement("div");
+    card.className="paymentRecord";
+
+    const title=document.createElement("h3");
+    title.className="paymentPaid";
+    title.textContent="পরিশোধ: ৳"+money(amount);
+
+    const method=document.createElement("p");
+    method.textContent=
+     "মাধ্যম: "+(data.method||"উল্লেখ নেই");
+
+    const reference=document.createElement("p");
+    reference.textContent=
+     "Reference: "+(data.reference||"নেই");
+
+    const date=document.createElement("p");
+    date.textContent=
+     "তারিখ: "+formatDate(data.paidAt);
+
+    card.append(title,method,reference,date);
+
+    paymentHistory.appendChild(card);
+
+   });
+
+   currentDriverPaid=Math.round(totalPaid*100)/100;
+
+   updatePaymentSummary();
+
+  },
+
+  error=>{
+
+   console.error("Payment History Error:",error);
+
+   paymentHistory.textContent=
+    "পেমেন্ট হিসাব লোড হয়নি। Firestore Rules পরীক্ষা করুন। Error: "+
+    error.code;
+
+  }
+
+ );
+
 }
 
 
@@ -344,6 +486,8 @@ async function checkDriver(user){
  onlineBtn.hidden=true;
  rideSection.hidden=true;
  earningsSection.hidden=true;
+ paymentSection.hidden=true;
+ paymentHistorySection.hidden=true;
 
  showMessage("আবেদনের অবস্থা যাচাই হচ্ছে...");
 
@@ -423,8 +567,11 @@ async function checkDriver(user){
 
   rideSection.hidden=false;
   earningsSection.hidden=false;
+  paymentSection.hidden=false;
+  paymentHistorySection.hidden=false;
 
   loadAssignedRides(user);
+  loadPaymentHistory(user);
 
  }catch(error){
 
@@ -523,10 +670,8 @@ onlineBtn.onclick=async()=>{
 function loadAssignedRides(user){
 
  if(stopAssignedRides){
-
   stopAssignedRides();
   stopAssignedRides=null;
-
  }
 
  assignedRides.textContent="Assigned Ride লোড হচ্ছে...";
@@ -537,13 +682,13 @@ function loadAssignedRides(user){
  );
 
  stopAssignedRides=onSnapshot(
+
   rideQuery,
 
   snapshot=>{
 
    assignedRides.replaceChildren();
 
-   // Update driver's earnings from completed rides
    updateEarnings(snapshot.docs);
 
    if(snapshot.empty){
@@ -685,10 +830,8 @@ async function respondToRide(id,response,accept,reject){
   if(response==="accepted"){
 
    await updateDoc(rideRef,{
-
     driverResponse:"accepted",
     driverRespondedAt:serverTimestamp()
-
    });
 
    alert("আপনি সফলভাবে Ride Accept করেছেন।");
@@ -696,12 +839,10 @@ async function respondToRide(id,response,accept,reject){
   }else{
 
    await updateDoc(rideRef,{
-
     driverId:deleteField(),
     assignedAt:deleteField(),
     driverResponse:"rejected",
     driverRespondedAt:serverTimestamp()
-
    });
 
    alert(
@@ -767,31 +908,37 @@ onAuthStateChanged(auth,user=>{
  if(user){
 
   if(!currentDriver||currentDriver.uid!==user.uid){
-
    checkDriver(user);
-
   }
 
  }else{
 
   if(stopAssignedRides){
-
    stopAssignedRides();
    stopAssignedRides=null;
+  }
 
+  if(stopPaymentHistory){
+   stopPaymentHistory();
+   stopPaymentHistory=null;
   }
 
   currentDriver=null;
   currentOnline=false;
+  currentDriverEarnings=0;
+  currentDriverPaid=0;
 
   form.hidden=false;
   logoutBtn.hidden=true;
   onlineBtn.hidden=true;
   rideSection.hidden=true;
   earningsSection.hidden=true;
+  paymentSection.hidden=true;
+  paymentHistorySection.hidden=true;
 
   result.textContent="";
   assignedRides.textContent="";
+  paymentHistory.textContent="";
 
  }
 
@@ -803,10 +950,13 @@ onAuthStateChanged(auth,user=>{
 logoutBtn.onclick=async()=>{
 
  if(stopAssignedRides){
-
   stopAssignedRides();
   stopAssignedRides=null;
+ }
 
+ if(stopPaymentHistory){
+  stopPaymentHistory();
+  stopPaymentHistory=null;
  }
 
  await signOut(auth);
