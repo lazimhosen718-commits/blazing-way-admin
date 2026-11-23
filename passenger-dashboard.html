@@ -52,6 +52,10 @@ button{
  font-size:16px;
  cursor:pointer;
 }
+button:disabled{
+ opacity:.6;
+ cursor:not-allowed;
+}
 .logout{background:#b42318}
 #fare{
  font-size:25px;
@@ -59,6 +63,10 @@ button{
  color:#087443;
 }
 .small{color:#64748b;font-size:13px}
+#bookingMessage{
+ font-size:14px;
+ line-height:1.6;
+}
 </style>
 </head>
 
@@ -97,7 +105,7 @@ placeholder="গন্তব্য লিখুন">
 
 <label>আনুমানিক দূরত্ব (কিলোমিটার)</label>
 <input id="distance" type="number"
-min="1" step="0.1"
+min="0.1" max="200" step="0.1"
 placeholder="যেমন: 5">
 
 <button id="calculateBtn">
@@ -113,15 +121,14 @@ placeholder="যেমন: 5">
 </p>
 
 <p class="small">
-এটি প্রাথমিক আনুমানিক হিসাব। প্রকৃত ভাড়া দূরত্ব ও অন্যান্য শর্ত অনুযায়ী পরিবর্তিত হতে পারে।
+এটি প্রাথমিক আনুমানিক হিসাব। প্রকৃত ভাড়া পরিবর্তিত হতে পারে।
 </p>
 
-<button id="bookingBtn">
-Ride Booking (শিগগিরই চালু হবে)
+<button id="bookingBtn" disabled>
+Ride Booking করুন
 </button>
 
 <p id="bookingMessage" class="small"></p>
-
 </div>
 
 </main>
@@ -140,7 +147,10 @@ signOut
 import {
 getFirestore,
 doc,
-getDoc
+getDoc,
+collection,
+addDoc,
+serverTimestamp
 } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-firestore.js";
 
 const app=initializeApp({
@@ -160,8 +170,38 @@ const nameBox=document.getElementById("passengerName");
 const emailBox=document.getElementById("passengerEmail");
 const fareBox=document.getElementById("fare");
 const fareDetails=document.getElementById("fareDetails");
+const bookingBtn=document.getElementById("bookingBtn");
+const bookingMessage=document.getElementById("bookingMessage");
+
+let passengerReady=false;
+
+function calculateFare(){
+
+const vehicle=document.getElementById("vehicle").value;
+const distance=Number(document.getElementById("distance").value);
+
+if(!Number.isFinite(distance) || distance<=0 || distance>200){
+throw new Error("দূরত্ব ০-এর বেশি এবং সর্বোচ্চ ২০০ কিলোমিটার হতে হবে।");
+}
+
+const base=vehicle==="bike"?30:60;
+const rate=vehicle==="bike"?12:20;
+
+const total=Math.round(base+(distance*rate));
+
+return {
+vehicle,
+distance,
+total,
+base
+};
+
+}
 
 onAuthStateChanged(auth,async(user)=>{
+
+passengerReady=false;
+bookingBtn.disabled=true;
 
 if(!user){
 window.location.replace("passenger-login.html");
@@ -187,10 +227,14 @@ const profile=profileSnap.data();
 nameBox.textContent="নাম: "+profile.fullName;
 emailBox.textContent="Gmail: "+profile.email;
 
+passengerReady=true;
+bookingBtn.disabled=false;
+
 }catch(error){
 
 console.error(error);
 nameBox.textContent="প্রোফাইল লোড করা যায়নি।";
+bookingMessage.textContent="ইন্টারনেট সংযোগ পরীক্ষা করে আবার চেষ্টা করুন।";
 
 }
 
@@ -213,45 +257,95 @@ document.getElementById("calculateBtn")
 
 const pickup=document.getElementById("pickup").value.trim();
 const destination=document.getElementById("destination").value.trim();
-const vehicle=document.getElementById("vehicle").value;
-const distance=Number(document.getElementById("distance").value);
 
 if(!pickup || !destination){
 alert("যাত্রা শুরুর স্থান ও গন্তব্য লিখুন।");
 return;
 }
 
-if(!Number.isFinite(distance) || distance<=0){
-alert("সঠিক দূরত্ব লিখুন।");
-return;
-}
+try{
 
-let base,rate;
+const result=calculateFare();
 
-if(vehicle==="bike"){
-base=30;
-rate=12;
-}else{
-base=60;
-rate=20;
-}
-
-const total=Math.round(base+(distance*rate));
-
-fareBox.textContent="৳"+total;
+fareBox.textContent="৳"+result.total;
 
 fareDetails.textContent=
-"মূল ভাড়া ৳"+base+
-" + দূরত্বভাড়া ৳"+Math.round(distance*rate)+
-" ("+distance+" কিমি)";
+"মূল ভাড়া ৳"+result.base+
+" + দূরত্বভাড়া ৳"+Math.round(result.distance*(result.vehicle==="bike"?12:20))+
+" ("+result.distance+" কিমি)";
+
+bookingMessage.textContent="";
+
+}catch(error){
+alert(error.message);
+}
 
 });
 
-document.getElementById("bookingBtn")
-.addEventListener("click",()=>{
+bookingBtn.addEventListener("click",async()=>{
 
-document.getElementById("bookingMessage").textContent=
-"বাস্তব Ride Booking চালু করার কাজ এখনো বাকি।";
+if(!passengerReady || !auth.currentUser){
+bookingMessage.textContent="প্রথমে Passenger Login করুন।";
+return;
+}
+
+const pickup=document.getElementById("pickup").value.trim();
+const destination=document.getElementById("destination").value.trim();
+
+if(pickup.length<2 || destination.length<2){
+bookingMessage.textContent="যাত্রার স্থান ও গন্তব্য সঠিকভাবে লিখুন।";
+return;
+}
+
+let result;
+
+try{
+result=calculateFare();
+}catch(error){
+bookingMessage.textContent=error.message;
+return;
+}
+
+bookingBtn.disabled=true;
+bookingBtn.textContent="Booking হচ্ছে...";
+bookingMessage.textContent="আপনার বুকিং জমা হচ্ছে...";
+
+try{
+
+const bookingData={
+passengerId:auth.currentUser.uid,
+pickup:pickup,
+destination:destination,
+vehicleType:result.vehicle,
+distanceKm:result.distance,
+estimatedFare:result.total,
+status:"pending",
+createdAt:serverTimestamp()
+};
+
+const bookingRef=await addDoc(
+collection(db,"rideBookings"),
+bookingData
+);
+
+bookingMessage.textContent=
+"অভিনন্দন! আপনার Ride Booking সফল হয়েছে।"+
+" বুকিং নম্বর: "+bookingRef.id+
+" | Status: Pending";
+
+}catch(error){
+
+console.error("Booking Error:",error);
+
+bookingMessage.textContent=
+"বুকিং করা যায়নি। আবার চেষ্টা করুন। Error: "+error.code;
+
+}finally{
+
+bookingBtn.disabled=!passengerReady;
+bookingBtn.textContent="Ride Booking করুন";
+
+}
 
 });
 
