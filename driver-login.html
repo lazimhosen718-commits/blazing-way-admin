@@ -51,10 +51,9 @@ button{
 }
 button:disabled{opacity:.5}
 #result{margin-top:18px;line-height:1.7;overflow-wrap:anywhere}
-.approved,.online{color:green;font-weight:bold}
+.approved,.online,.completed{color:green;font-weight:bold}
 .pending{color:#a15c00;font-weight:bold}
-.rejected{color:#b42318;font-weight:bold}
-.offline{color:#b42318;font-weight:bold}
+.rejected,.offline{color:#b42318;font-weight:bold}
 .ride{
  border:1px solid #cbd5e1;
  border-radius:10px;
@@ -66,6 +65,47 @@ button:disabled{opacity:.5}
 .rejectBtn{background:#b42318}
 .ride p{line-height:1.5}
 a{color:#123b70}
+.earningsGrid{
+ display:grid;
+ grid-template-columns:repeat(2,minmax(0,1fr));
+ gap:12px;
+ margin-top:15px;
+}
+.earningItem{
+ background:#f1f5f9;
+ padding:15px;
+ border-radius:9px;
+}
+.earningItem p{
+ margin:0 0 8px;
+ color:#475569;
+ font-size:14px;
+}
+.earningItem h3{
+ margin:0;
+ font-size:22px;
+ overflow-wrap:anywhere;
+}
+.driverIncome{
+ color:#087443;
+}
+.commissionInfo{
+ background:#fff7ed;
+ padding:12px;
+ border-radius:8px;
+ margin-top:15px;
+ line-height:1.6;
+}
+.rideIncome{
+ background:#e8f5e9;
+ border-radius:8px;
+ padding:12px;
+ margin-top:12px;
+ line-height:1.7;
+}
+@media(max-width:380px){
+ .earningsGrid{grid-template-columns:1fr}
+}
 </style>
 </head>
 
@@ -100,6 +140,44 @@ a{color:#123b70}
 <button id="logoutBtn" hidden>Logout</button>
 
 <p><a href="driver-register.html">নতুন চালক নিবন্ধন</a></p>
+
+</div>
+
+<!-- DRIVER EARNINGS -->
+<div class="card" id="earningsSection" hidden>
+
+<h2>💰 আমার আয় (Driver Earnings)</h2>
+
+<p>প্রতিটি Completed Ride-এর ভাড়া থেকে Admin কমিশন ১% এবং চালকের আয় ৯৯%।</p>
+
+<div class="earningsGrid">
+
+ <div class="earningItem">
+  <p>Completed Ride</p>
+  <h3 id="completedCount">০</h3>
+ </div>
+
+ <div class="earningItem">
+  <p>মোট Ride ভাড়া</p>
+  <h3 id="totalFare">৳০.০০</h3>
+ </div>
+
+ <div class="earningItem">
+  <p>Admin কমিশন ১%</p>
+  <h3 id="totalCommission">৳০.০০</h3>
+ </div>
+
+ <div class="earningItem">
+  <p>আপনার আয় ৯৯%</p>
+  <h3 class="driverIncome" id="driverEarnings">৳০.০০</h3>
+ </div>
+
+</div>
+
+<div class="commissionInfo">
+ <strong>আয়ের হিসাব:</strong>
+ <p id="earningsFormula">Completed Ride-এর হিসাব এখানে দেখা যাবে।</p>
+</div>
 
 </div>
 
@@ -142,6 +220,9 @@ import {
 } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-firestore.js";
 
 
+const COMMISSION_RATE=0.01;
+const DRIVER_RATE=0.99;
+
 const app=initializeApp({
  apiKey:"AIzaSyAV6za_TROkL0lSzdEPIWbMfRh00NR21KE",
  authDomain:"blazing-way.firebaseapp.com",
@@ -161,11 +242,19 @@ const logoutBtn=document.getElementById("logoutBtn");
 const onlineBtn=document.getElementById("onlineBtn");
 const rideSection=document.getElementById("rideSection");
 const assignedRides=document.getElementById("assignedRides");
+const earningsSection=document.getElementById("earningsSection");
 
 let currentDriver=null;
 let currentOnline=false;
 let busy=false;
 let stopAssignedRides=null;
+
+
+// MONEY FORMAT
+
+function money(value){
+ return Number(value||0).toFixed(2);
+}
 
 
 // MESSAGE
@@ -183,6 +272,67 @@ function showMessage(message,className=""){
 }
 
 
+// UPDATE EARNINGS
+
+function updateEarnings(docs){
+
+ let completedCount=0;
+ let totalFare=0;
+ let totalCommission=0;
+ let driverIncome=0;
+
+ docs.forEach(item=>{
+
+  const data=item.data();
+
+  if(data.status==="completed"){
+
+   const fare=Math.round(
+    Number(data.estimatedFare||0)*100
+   )/100;
+
+   const commission=Math.round(
+    fare*COMMISSION_RATE*100
+   )/100;
+
+   const income=Math.round(
+    fare*DRIVER_RATE*100
+   )/100;
+
+   completedCount++;
+   totalFare+=fare;
+   totalCommission+=commission;
+   driverIncome+=income;
+
+  }
+
+ });
+
+ // Floating point rounding correction
+ totalFare=Math.round(totalFare*100)/100;
+ totalCommission=Math.round(totalCommission*100)/100;
+ driverIncome=Math.round(driverIncome*100)/100;
+
+ document.getElementById("completedCount").textContent=
+  completedCount.toLocaleString("bn-BD");
+
+ document.getElementById("totalFare").textContent=
+  "৳"+money(totalFare);
+
+ document.getElementById("totalCommission").textContent=
+  "৳"+money(totalCommission);
+
+ document.getElementById("driverEarnings").textContent=
+  "৳"+money(driverIncome);
+
+ document.getElementById("earningsFormula").textContent=
+  "মোট ভাড়া ৳"+money(totalFare)+
+  " - Admin কমিশন ৳"+money(totalCommission)+
+  " = আপনার আয় ৳"+money(driverIncome);
+
+}
+
+
 // CHECK DRIVER
 
 async function checkDriver(user){
@@ -193,6 +343,7 @@ async function checkDriver(user){
  logoutBtn.hidden=false;
  onlineBtn.hidden=true;
  rideSection.hidden=true;
+ earningsSection.hidden=true;
 
  showMessage("আবেদনের অবস্থা যাচাই হচ্ছে...");
 
@@ -271,6 +422,7 @@ async function checkDriver(user){
   updateOnlineDisplay();
 
   rideSection.hidden=false;
+  earningsSection.hidden=false;
 
   loadAssignedRides(user);
 
@@ -366,7 +518,7 @@ onlineBtn.onclick=async()=>{
 };
 
 
-// LOAD ASSIGNED RIDES
+// LOAD ASSIGNED RIDES AND EARNINGS
 
 function loadAssignedRides(user){
 
@@ -391,6 +543,9 @@ function loadAssignedRides(user){
 
    assignedRides.replaceChildren();
 
+   // Update driver's earnings from completed rides
+   updateEarnings(snapshot.docs);
+
    if(snapshot.empty){
 
     assignedRides.textContent=
@@ -408,7 +563,7 @@ function loadAssignedRides(user){
     card.className="ride";
 
     const title=document.createElement("h3");
-    title.textContent="🚕 নতুন Ride";
+    title.textContent="🚕 Ride";
 
     const pickup=document.createElement("p");
     pickup.textContent="Pickup: "+(data.pickup||"নেই");
@@ -428,7 +583,7 @@ function loadAssignedRides(user){
 
     const fare=document.createElement("p");
     fare.textContent=
-     "ভাড়া: ৳"+(data.estimatedFare||0);
+     "ভাড়া: ৳"+money(data.estimatedFare||0);
 
     const status=document.createElement("p");
     status.textContent="Booking Status: "+(data.status||"unknown");
@@ -437,7 +592,29 @@ function loadAssignedRides(user){
      title,pickup,destination,vehicle,distance,fare,status
     );
 
-    if(data.driverResponse==="accepted"){
+    if(data.status==="completed"){
+
+     const commission=Math.round(
+      Number(data.estimatedFare||0)*COMMISSION_RATE*100
+     )/100;
+
+     const income=Math.round(
+      Number(data.estimatedFare||0)*DRIVER_RATE*100
+     )/100;
+
+     const completed=document.createElement("p");
+     completed.className="completed";
+     completed.textContent="এই Ride সম্পন্ন হয়েছে।";
+
+     const earning=document.createElement("div");
+     earning.className="rideIncome";
+     earning.textContent=
+      "এই Ride-এ আপনার আয়: ৳"+money(income)+
+      " | Admin কমিশন: ৳"+money(commission);
+
+     card.append(completed,earning);
+
+    }else if(data.driverResponse==="accepted"){
 
      const accepted=document.createElement("p");
      accepted.className="approved";
@@ -445,7 +622,7 @@ function loadAssignedRides(user){
 
      card.appendChild(accepted);
 
-    }else{
+    }else if(data.status==="accepted"){
 
      const accept=document.createElement("button");
      accept.className="acceptBtn";
@@ -611,6 +788,7 @@ onAuthStateChanged(auth,user=>{
   logoutBtn.hidden=true;
   onlineBtn.hidden=true;
   rideSection.hidden=true;
+  earningsSection.hidden=true;
 
   result.textContent="";
   assignedRides.textContent="";
