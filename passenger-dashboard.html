@@ -1,0 +1,261 @@
+
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BLAZING-WAY Passenger Dashboard</title>
+
+<style>
+*{box-sizing:border-box}
+body{
+ margin:0;
+ font-family:Arial,sans-serif;
+ background:#eef2f7;
+ color:#172554;
+}
+header{
+ background:#123b70;
+ color:white;
+ padding:20px;
+ text-align:center;
+}
+header h1{margin:0}
+main{
+ max-width:650px;
+ margin:20px auto;
+ padding:15px;
+}
+.card{
+ background:white;
+ padding:20px;
+ margin-bottom:16px;
+ border-radius:12px;
+ box-shadow:0 3px 12px #ddd;
+}
+input,select{
+ width:100%;
+ padding:13px;
+ margin:8px 0;
+ border:1px solid #ccc;
+ border-radius:7px;
+ font-size:16px;
+}
+button{
+ width:100%;
+ padding:14px;
+ margin-top:10px;
+ border:0;
+ border-radius:7px;
+ background:#123b70;
+ color:white;
+ font-size:16px;
+ cursor:pointer;
+}
+.logout{background:#b42318}
+#fare{
+ font-size:25px;
+ font-weight:bold;
+ color:#087443;
+}
+.small{color:#64748b;font-size:13px}
+</style>
+</head>
+
+<body>
+
+<header>
+<h1>BLAZING-WAY</h1>
+<p>Passenger Dashboard</p>
+</header>
+
+<main>
+
+<div class="card">
+<h2>স্বাগতম!</h2>
+<p id="passengerName">তথ্য লোড হচ্ছে...</p>
+<p id="passengerEmail"></p>
+<button class="logout" id="logoutBtn">Logout</button>
+</div>
+
+<div class="card">
+<h2>আপনার যাত্রা পরিকল্পনা করুন</h2>
+
+<label>কোথা থেকে যাত্রা শুরু করবেন?</label>
+<input id="pickup" type="text"
+placeholder="যাত্রা শুরুর স্থান লিখুন">
+
+<label>কোথায় যাবেন?</label>
+<input id="destination" type="text"
+placeholder="গন্তব্য লিখুন">
+
+<label>যানবাহন নির্বাচন করুন</label>
+<select id="vehicle">
+<option value="bike">Bike</option>
+<option value="car">Private Car</option>
+</select>
+
+<label>আনুমানিক দূরত্ব (কিলোমিটার)</label>
+<input id="distance" type="number"
+min="1" step="0.1"
+placeholder="যেমন: 5">
+
+<button id="calculateBtn">
+ভাড়া হিসাব করুন
+</button>
+
+<hr>
+
+<h3>আনুমানিক ভাড়া</h3>
+<p id="fare">৳০</p>
+<p class="small" id="fareDetails">
+দূরত্ব ও যানবাহন নির্বাচন করে ভাড়া হিসাব করুন।
+</p>
+
+<p class="small">
+এটি প্রাথমিক আনুমানিক হিসাব। প্রকৃত ভাড়া দূরত্ব ও অন্যান্য শর্ত অনুযায়ী পরিবর্তিত হতে পারে।
+</p>
+
+<button id="bookingBtn">
+Ride Booking (শিগগিরই চালু হবে)
+</button>
+
+<p id="bookingMessage" class="small"></p>
+
+</div>
+
+</main>
+
+<script type="module">
+
+import {initializeApp}
+from "https://www.gstatic.com/firebasejs/12.0.0/firebase-app.js";
+
+import {
+getAuth,
+onAuthStateChanged,
+signOut
+} from "https://www.gstatic.com/firebasejs/12.0.0/firebase-auth.js";
+
+import {
+getFirestore,
+doc,
+getDoc
+} from "https://www.gstatic.com/firebasejs/12.0.0/firebase-firestore.js";
+
+const app=initializeApp({
+apiKey:"AIzaSyBVzdXw-nO8ixDqxbGhTj3lbBX37XUMCr4",
+authDomain:"blazing-way.firebaseapp.com",
+projectId:"blazing-way",
+storageBucket:"blazing-way.firebasestorage.app",
+messagingSenderId:"100523779075",
+appId:"1:100523779075:web:732df54a1b0565f02e1a36",
+measurementId:"G-9V8GMD28ST"
+});
+
+const auth=getAuth(app);
+const db=getFirestore(app);
+
+const nameBox=document.getElementById("passengerName");
+const emailBox=document.getElementById("passengerEmail");
+const fareBox=document.getElementById("fare");
+const fareDetails=document.getElementById("fareDetails");
+
+onAuthStateChanged(auth,async(user)=>{
+
+if(!user){
+window.location.replace("passenger-login.html");
+return;
+}
+
+try{
+
+const profileRef=doc(db,"passengerProfiles",user.uid);
+const profileSnap=await getDoc(profileRef);
+
+if(!profileSnap.exists() ||
+profileSnap.data().role!=="passenger"){
+
+await signOut(auth);
+window.location.replace("passenger-login.html");
+return;
+
+}
+
+const profile=profileSnap.data();
+
+nameBox.textContent="নাম: "+profile.fullName;
+emailBox.textContent="Gmail: "+profile.email;
+
+}catch(error){
+
+console.error(error);
+nameBox.textContent="প্রোফাইল লোড করা যায়নি।";
+
+}
+
+});
+
+document.getElementById("logoutBtn")
+.addEventListener("click",async()=>{
+
+try{
+await signOut(auth);
+window.location.replace("passenger-login.html");
+}catch(error){
+alert("Logout করা যায়নি। আবার চেষ্টা করুন।");
+}
+
+});
+
+document.getElementById("calculateBtn")
+.addEventListener("click",()=>{
+
+const pickup=document.getElementById("pickup").value.trim();
+const destination=document.getElementById("destination").value.trim();
+const vehicle=document.getElementById("vehicle").value;
+const distance=Number(document.getElementById("distance").value);
+
+if(!pickup || !destination){
+alert("যাত্রা শুরুর স্থান ও গন্তব্য লিখুন।");
+return;
+}
+
+if(!Number.isFinite(distance) || distance<=0){
+alert("সঠিক দূরত্ব লিখুন।");
+return;
+}
+
+let base,rate;
+
+if(vehicle==="bike"){
+base=30;
+rate=12;
+}else{
+base=60;
+rate=20;
+}
+
+const total=Math.round(base+(distance*rate));
+
+fareBox.textContent="৳"+total;
+
+fareDetails.textContent=
+"মূল ভাড়া ৳"+base+
+" + দূরত্বভাড়া ৳"+Math.round(distance*rate)+
+" ("+distance+" কিমি)";
+
+});
+
+document.getElementById("bookingBtn")
+.addEventListener("click",()=>{
+
+document.getElementById("bookingMessage").textContent=
+"বাস্তব Ride Booking চালু করার কাজ এখনো বাকি।";
+
+});
+
+</script>
+
+</body>
+</html>
