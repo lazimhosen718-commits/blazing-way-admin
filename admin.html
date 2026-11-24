@@ -431,7 +431,7 @@ function applyAdminRoleVisibility(){
  headings.forEach(h=>{
   const t=(h.textContent||"").toLowerCase();
   if(t.includes("driver payment")){const card=h.closest(".card");if(card)card.style.display=(ride||finance)?"":"none";}
-  if(t.includes("food wallet")){const card=h.closest(".card");if(card)card.style.display=(food||foodRider||finance)?"":"none";}
+  if(t.includes("food wallet")){const card=h.closest(".card");if(card)card.style.display=(food||finance)?"":"none";}
  });
  const welcome=document.querySelector("#dashboard > .card h2");
  if(welcome)welcome.textContent=currentIsSuperAdmin?"স্বাগতম, Super Admin!":"স্বাগতম, Service Admin!";
