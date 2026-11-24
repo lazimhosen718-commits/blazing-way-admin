@@ -29,10 +29,16 @@ button:disabled{opacity:.6}.balance{font-size:30px;font-weight:bold;color:#08744
  <div class="card">
   <h2>➕ Wallet-এ টাকা যোগ করার অনুরোধ</h2>
   <p class="small">নিচের নম্বরে/অ্যাকাউন্টে টাকা পাঠানোর পর Transaction ID দিয়ে অনুরোধ জমা দিন। Admin যাচাই করে অনুমোদন করলে Wallet-এ টাকা যোগ হবে।</p>
-  <div class="notice">এটি এখনো স্বয়ংক্রিয় Payment Gateway নয়। টাকা পাঠানোর আগে BLAZING-WAY-এর অনুমোদিত পেমেন্ট নম্বর Admin-এর কাছ থেকে নিশ্চিত করুন। ভুল বা ভুয়া Transaction ID দেবেন না।</div>
+  <div class="notice">bKash, Nagad ও Rocket-এর জন্য BLAZING-WAY-এর পেমেন্ট নম্বর দেখানো হবে। এটি এখনো স্বয়ংক্রিয় Payment Gateway নয়। টাকা পাঠানোর আগে নম্বর ও প্রাপকের নাম যাচাই করুন। ভুল বা ভুয়া Transaction ID দেবেন না। Bank transfer-এর তথ্য Admin-এর কাছ থেকে নিশ্চিত করুন।</div>
   <label>টাকার পরিমাণ (৳)</label><input id="amount" type="number" min="10" max="50000" step="1" placeholder="যেমন: 500">
   <label>পেমেন্ট পদ্ধতি</label>
   <select id="method"><option value="bKash">bKash</option><option value="Nagad">Nagad</option><option value="Rocket">Rocket</option><option value="Bank">Bank</option></select>
+  <div id="paymentDetails" class="notice" style="margin:10px 0">
+   <strong id="paymentTitle">bKash পেমেন্ট নম্বর</strong>
+   <div id="paymentNumber" style="font-size:22px;font-weight:bold;margin:8px 0">01731239774</div>
+   <button type="button" id="copyPaymentNumber" style="margin-top:6px">নম্বর কপি করুন</button>
+   <div id="paymentHint" style="margin-top:8px">Send Money করার আগে নম্বরটি ভালোভাবে মিলিয়ে নিন।</div>
+  </div>
   <label>Transaction ID / Reference</label><input id="trx" type="text" maxlength="100" placeholder="টাকা পাঠানোর Transaction ID">
   <button id="submitBtn" disabled>টাকা যোগের অনুরোধ জমা দিন</button>
   <p id="message" class="small"></p>
@@ -91,6 +97,23 @@ onAuthStateChanged(auth,async user=>{
   },err=>{$("history").textContent="Transaction History লোড হয়নি: "+err.code});
  }catch(err){$("userInfo").textContent="প্রোফাইল লোড হয়নি: "+err.code}
 });
+const paymentNumbers={bKash:"01731239774",Nagad:"01731239774",Rocket:"01731239774"};
+function updatePaymentDetails(){
+ const method=$("method").value;
+ const number=paymentNumbers[method];
+ $("paymentTitle").textContent=number?method+" পেমেন্ট নম্বর":"Bank Transfer তথ্য";
+ $("paymentNumber").textContent=number||"Admin-এর কাছ থেকে Bank তথ্য নিন";
+ $("copyPaymentNumber").style.display=number?"block":"none";
+ $("paymentHint").textContent=number?"Send Money করার আগে প্রাপকের নাম ও নম্বর যাচাই করুন।":"Bank account details নিশ্চিত না হয়ে টাকা পাঠাবেন না।";
+}
+$("method").addEventListener("change",updatePaymentDetails);
+$("copyPaymentNumber").addEventListener("click",async()=>{
+ const number=paymentNumbers[$("method").value];
+ if(!number)return;
+ try{await navigator.clipboard.writeText(number);$("message").textContent="পেমেন্ট নম্বর কপি হয়েছে: "+number;}
+ catch(err){$("message").textContent="কপি করা যায়নি। নম্বরটি হাতে কপি করুন: "+number;}
+});
+updatePaymentDetails();
 $("submitBtn").addEventListener("click",async()=>{
  const amount=Number($("amount").value),method=$("method").value,trx=$("trx").value.trim();
  if(!currentUid){$("message").textContent="আবার Login করুন।";return}
