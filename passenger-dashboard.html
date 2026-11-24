@@ -22,7 +22,7 @@ header{
 }
 header h1{margin:0}
 main{
- max-width:650px;
+ max-width:700px;
  margin:20px auto;
  padding:15px;
 }
@@ -103,6 +103,46 @@ button:disabled{opacity:.6;cursor:not-allowed}
  border-radius:7px;
  margin-top:8px;
 }
+.services-grid{
+ display:grid;
+ grid-template-columns:repeat(2,1fr);
+ gap:12px;
+}
+.service{
+ border:1px solid #dbe3ef;
+ background:#f8fafc;
+ border-radius:12px;
+ padding:16px 8px;
+ text-align:center;
+ cursor:pointer;
+ min-height:120px;
+}
+.service:active{background:#e0ecff}
+.service-icon{
+ font-size:34px;
+ display:block;
+ margin-bottom:8px;
+}
+.service strong{display:block;font-size:16px}
+.service small{
+ display:block;
+ color:#64748b;
+ margin-top:5px;
+}
+.service.active{
+ border:2px solid #087443;
+ background:#ecfdf5;
+}
+.section-title{margin-top:0}
+.notice{
+ background:#fff7ed;
+ border:1px solid #fed7aa;
+ color:#9a3412;
+ border-radius:8px;
+ padding:12px;
+ font-size:13px;
+ line-height:1.6;
+}
 </style>
 </head>
 
@@ -122,8 +162,61 @@ button:disabled{opacity:.6;cursor:not-allowed}
 <button class="logout" id="logoutBtn">Logout</button>
 </div>
 
+<!-- SERVICES -->
 <div class="card">
-<h2>আপনার যাত্রা পরিকল্পনা করুন</h2>
+<h2 class="section-title">🚀 আমাদের সার্ভিসসমূহ</h2>
+<p class="small">আপনার প্রয়োজন অনুযায়ী সার্ভিস নির্বাচন করুন।</p>
+
+<div class="services-grid">
+
+<button type="button" class="service active" data-service="bike">
+<span class="service-icon">🏍️</span>
+<strong>Bike</strong>
+<small>মোটরবাইক রাইড</small>
+</button>
+
+<button type="button" class="service" data-service="car">
+<span class="service-icon">🚘</span>
+<strong>Car</strong>
+<small>প্রাইভেট কার রাইড</small>
+</button>
+
+<button type="button" class="service" data-service="food">
+<span class="service-icon">🍔</span>
+<strong>Food</strong>
+<small>খাবার ডেলিভারি</small>
+</button>
+
+<button type="button" class="service" data-service="parcel">
+<span class="service-icon">📦</span>
+<strong>Parcel</strong>
+<small>পার্সেল পাঠান</small>
+</button>
+
+<button type="button" class="service" data-service="courier">
+<span class="service-icon">🚚</span>
+<strong>Courier</strong>
+<small>ব্যবসায়িক ডেলিভারি</small>
+</button>
+
+<button type="button" class="service" data-service="pay">
+<span class="service-icon">💳</span>
+<strong>BLAZING-WAY Pay</strong>
+<small>ডিজিটাল পেমেন্ট</small>
+</button>
+
+<button type="button" class="service" data-service="offers">
+<span class="service-icon">🎁</span>
+<strong>Points & Offers</strong>
+<small>পয়েন্ট ও ডিসকাউন্ট</small>
+</button>
+
+</div>
+</div>
+
+<!-- RIDE BOOKING -->
+<div class="card" id="rideSection">
+<h2>🚕 আপনার যাত্রা পরিকল্পনা করুন</h2>
 
 <label>কোথা থেকে যাত্রা শুরু করবেন?</label>
 <input id="pickup" type="text" placeholder="যাত্রা শুরুর স্থান লিখুন">
@@ -158,12 +251,21 @@ button:disabled{opacity:.6;cursor:not-allowed}
 <p id="bookingMessage" class="small"></p>
 </div>
 
+<!-- MY BOOKINGS -->
 <div class="card">
 <h2>🚕 আমার বুকিংসমূহ</h2>
 <p class="small">
 আপনার সব Ride Booking এবং বর্তমান Status এখানে দেখতে পাবেন।
 </p>
 <div id="myBookings">তথ্য লোড হচ্ছে...</div>
+</div>
+
+<div class="card">
+<h3>ℹ️ BLAZING-WAY</h3>
+<p class="small">
+আমরা ধাপে ধাপে নতুন নতুন সার্ভিস যুক্ত করছি।
+Food, Parcel, Courier, Pay এবং Offers সার্ভিসগুলো এখনো চালু হয়নি।
+</p>
 </div>
 
 </main>
@@ -174,31 +276,31 @@ import {initializeApp}
 from "https://www.gstatic.com/firebasejs/12.0.0/firebase-app.js";
 
 import {
-getAuth,
-onAuthStateChanged,
-signOut
+ getAuth,
+ onAuthStateChanged,
+ signOut
 } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-auth.js";
 
 import {
-getFirestore,
-doc,
-getDoc,
-collection,
-addDoc,
-serverTimestamp,
-query,
-where,
-onSnapshot
+ getFirestore,
+ doc,
+ getDoc,
+ collection,
+ addDoc,
+ serverTimestamp,
+ query,
+ where,
+ onSnapshot
 } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-firestore.js";
 
 const app=initializeApp({
-apiKey:"AIzaSyBVzdXw-nO8ixDqxbGhTj3lbBX37XUMCr4",
-authDomain:"blazing-way.firebaseapp.com",
-projectId:"blazing-way",
-storageBucket:"blazing-way.firebasestorage.app",
-messagingSenderId:"100523779075",
-appId:"1:100523779075:web:732df54a1b0565f02e1a36",
-measurementId:"G-9V8GMD28ST"
+ apiKey:"AIzaSyBVzdXw-nO8ixDqxbGhTj3lbBX37XUMCr4",
+ authDomain:"blazing-way.firebaseapp.com",
+ projectId:"blazing-way",
+ storageBucket:"blazing-way.firebasestorage.app",
+ messagingSenderId:"100523779075",
+ appId:"1:100523779075:web:732df54a1b0565f02e1a36",
+ measurementId:"G-9V8GMD28ST"
 });
 
 const auth=getAuth(app);
@@ -215,235 +317,284 @@ const myBookings=document.getElementById("myBookings");
 let passengerReady=false;
 let unsubscribeBookings=null;
 
+// SERVICE SELECTION
+document.querySelectorAll(".service").forEach(button=>{
+
+ button.addEventListener("click",()=>{
+
+  const service=button.dataset.service;
+
+  document.querySelectorAll(".service")
+   .forEach(item=>item.classList.remove("active"));
+
+  button.classList.add("active");
+
+  if(service==="bike"||service==="car"){
+
+   document.getElementById("vehicle").value=service;
+
+   document.getElementById("rideSection")
+    .scrollIntoView({behavior:"smooth"});
+
+   bookingMessage.textContent=
+    service==="bike"?
+    "Bike Ride নির্বাচন করা হয়েছে।":
+    "Private Car Ride নির্বাচন করা হয়েছে।";
+
+  }else{
+
+   const names={
+    food:"Food Delivery",
+    parcel:"Parcel",
+    courier:"Courier",
+    pay:"BLAZING-WAY Pay",
+    offers:"Points & Offers"
+   };
+
+   alert(names[service]+" সার্ভিসটি শিগগিরই চালু হবে।");
+
+  }
+
+ });
+
+});
+
 // FARE CALCULATION
 function calculateFare(){
 
-const vehicle=document.getElementById("vehicle").value;
-const distance=Number(document.getElementById("distance").value);
+ const vehicle=document.getElementById("vehicle").value;
+ const distance=Number(document.getElementById("distance").value);
 
-if(!Number.isFinite(distance)||distance<=0||distance>200){
-throw new Error("দূরত্ব ০-এর বেশি এবং সর্বোচ্চ ২০০ কিলোমিটার হতে হবে।");
-}
+ if(!Number.isFinite(distance)||distance<=0||distance>200){
+  throw new Error("দূরত্ব ০-এর বেশি এবং সর্বোচ্চ ২০০ কিলোমিটার হতে হবে।");
+ }
 
-const base=vehicle==="bike"?30:60;
-const rate=vehicle==="bike"?12:20;
-const total=Math.round(base+(distance*rate));
+ const base=vehicle==="bike"?30:60;
+ const rate=vehicle==="bike"?12:20;
+ const total=Math.round(base+(distance*rate));
 
-return {vehicle,distance,total,base};
+ return {vehicle,distance,total,base};
 }
 
 // STATUS TRANSLATION
 function statusText(status){
 
-const statuses={
-pending:"Pending — Admin-এর অনুমোদনের অপেক্ষায়",
-accepted:"Accepted — Ride গ্রহণ করা হয়েছে",
-rejected:"Rejected — Ride বাতিল করা হয়েছে",
-completed:"Completed — যাত্রা সম্পন্ন হয়েছে",
-cancelled:"Cancelled — Booking বাতিল হয়েছে"
-};
+ const statuses={
+  pending:"Pending — Admin-এর অনুমোদনের অপেক্ষায়",
+  accepted:"Accepted — Ride গ্রহণ করা হয়েছে",
+  rejected:"Rejected — Ride বাতিল করা হয়েছে",
+  completed:"Completed — যাত্রা সম্পন্ন হয়েছে",
+  cancelled:"Cancelled — Booking বাতিল হয়েছে"
+ };
 
-return statuses[status]||status||"অজানা";
+ return statuses[status]||status||"অজানা";
 }
 
 // SAFE INFORMATION DISPLAY
 function addInfo(parent,label,value){
 
-const p=document.createElement("p");
-p.textContent=label+": "+(value??"তথ্য নেই");
-parent.appendChild(p);
+ const p=document.createElement("p");
+ p.textContent=label+": "+(value??"তথ্য নেই");
+ parent.appendChild(p);
 }
 
 // LOAD BOOKINGS
 function loadMyBookings(uid){
 
-if(unsubscribeBookings){
-unsubscribeBookings();
-}
+ if(unsubscribeBookings){
+  unsubscribeBookings();
+ }
 
-myBookings.textContent="আপনার বুকিং লোড হচ্ছে...";
+ myBookings.textContent="আপনার বুকিং লোড হচ্ছে...";
 
-const bookingsQuery=query(
-collection(db,"rideBookings"),
-where("passengerId","==",uid)
-);
+ const bookingsQuery=query(
+  collection(db,"rideBookings"),
+  where("passengerId","==",uid)
+ );
 
-unsubscribeBookings=onSnapshot(
-bookingsQuery,
-(snapshot)=>{
+ unsubscribeBookings=onSnapshot(
+  bookingsQuery,
+  (snapshot)=>{
 
-myBookings.innerHTML="";
+   myBookings.innerHTML="";
 
-if(snapshot.empty){
-myBookings.textContent="আপনার কোনো Ride Booking নেই।";
-return;
-}
+   if(snapshot.empty){
+    myBookings.textContent="আপনার কোনো Ride Booking নেই।";
+    return;
+   }
 
-const bookings=snapshot.docs.map(documentSnap=>({
-id:documentSnap.id,
-...documentSnap.data()
-}));
+   const bookings=snapshot.docs.map(documentSnap=>({
+    id:documentSnap.id,
+    ...documentSnap.data()
+   }));
 
-bookings.sort((a,b)=>{
-const timeA=a.createdAt?.toMillis?.()||0;
-const timeB=b.createdAt?.toMillis?.()||0;
-return timeB-timeA;
-});
+   bookings.sort((a,b)=>{
+    const timeA=a.createdAt?.toMillis?.()||0;
+    const timeB=b.createdAt?.toMillis?.()||0;
+    return timeB-timeA;
+   });
 
-bookings.forEach((booking,index)=>{
+   bookings.forEach((booking,index)=>{
 
-const item=document.createElement("div");
-item.className="booking-item";
+    const item=document.createElement("div");
+    item.className="booking-item";
 
-const title=document.createElement("h3");
-title.textContent="🚕 Ride Booking "+(index+1);
-item.appendChild(title);
+    const title=document.createElement("h3");
+    title.textContent="🚕 Ride Booking "+(index+1);
+    item.appendChild(title);
 
-addInfo(item,"Booking ID",booking.id);
-addInfo(item,"Pickup",booking.pickup);
-addInfo(item,"Destination",booking.destination);
-addInfo(item,"যানবাহন",
-booking.vehicleType==="bike"?"Bike":"Private Car");
-addInfo(item,"দূরত্ব",booking.distanceKm+" কিমি");
-addInfo(item,"আনুমানিক ভাড়া","৳"+booking.estimatedFare);
+    addInfo(item,"Booking ID",booking.id);
+    addInfo(item,"Pickup",booking.pickup);
+    addInfo(item,"Destination",booking.destination);
 
-const statusLabel=document.createElement("p");
-statusLabel.textContent="Booking Status: ";
+    addInfo(
+     item,
+     "যানবাহন",
+     booking.vehicleType==="bike"?"Bike":"Private Car"
+    );
 
-const statusSpan=document.createElement("span");
-statusSpan.className="status "+(booking.status||"pending");
-statusSpan.textContent=statusText(booking.status);
+    addInfo(item,"দূরত্ব",booking.distanceKm+" কিমি");
+    addInfo(item,"আনুমানিক ভাড়া","৳"+booking.estimatedFare);
 
-statusLabel.appendChild(statusSpan);
-item.appendChild(statusLabel);
+    const statusLabel=document.createElement("p");
+    statusLabel.textContent="Booking Status: ";
 
-// DRIVER DETAILS
-if(booking.driverId){
+    const statusSpan=document.createElement("span");
+    statusSpan.className="status "+(booking.status||"pending");
+    statusSpan.textContent=statusText(booking.status);
 
-const driverBox=document.createElement("div");
-driverBox.className="driver-box";
+    statusLabel.appendChild(statusSpan);
+    item.appendChild(statusLabel);
 
-const heading=document.createElement("h3");
-heading.textContent="🚘 আপনার চালকের তথ্য";
-driverBox.appendChild(heading);
+    // DRIVER DETAILS
+    if(booking.driverId){
 
-addInfo(
-driverBox,
-"Driver Name",
-booking.driverName||"তথ্য এখনো সংরক্ষিত হয়নি"
-);
+     const driverBox=document.createElement("div");
+     driverBox.className="driver-box";
 
-addInfo(
-driverBox,
-"Driver Phone",
-booking.driverPhone||"তথ্য এখনো সংরক্ষিত হয়নি"
-);
+     const heading=document.createElement("h3");
+     heading.textContent="🚘 আপনার চালকের তথ্য";
+     driverBox.appendChild(heading);
 
-// CALL BUTTON
-if(
-typeof booking.driverPhone==="string" &&
-/^01[3-9][0-9]{8}$/.test(booking.driverPhone)
-){
+     addInfo(
+      driverBox,
+      "Driver Name",
+      booking.driverName||"তথ্য এখনো সংরক্ষিত হয়নি"
+     );
 
-const callLink=document.createElement("a");
-callLink.className="call-link";
-callLink.href="tel:"+booking.driverPhone;
-callLink.textContent="📞 চালককে কল করুন";
-driverBox.appendChild(callLink);
+     addInfo(
+      driverBox,
+      "Driver Phone",
+      booking.driverPhone||"তথ্য এখনো সংরক্ষিত হয়নি"
+     );
 
-}else{
+     // CALL BUTTON
+     if(
+      typeof booking.driverPhone==="string" &&
+      /^01[3-9][0-9]{8}$/.test(booking.driverPhone)
+     ){
 
-const note=document.createElement("p");
-note.className="small";
-note.textContent="চালকের ফোন নম্বর পাওয়া গেলে এখানে কল করার বাটন দেখা যাবে।";
-driverBox.appendChild(note);
+      const callLink=document.createElement("a");
+      callLink.className="call-link";
+      callLink.href="tel:"+booking.driverPhone;
+      callLink.textContent="📞 চালককে কল করুন";
+      driverBox.appendChild(callLink);
 
-}
+     }else{
 
-if(!booking.driverName||!booking.driverPhone){
-const warning=document.createElement("p");
-warning.className="small";
-warning.textContent=
-"চালকের নাম ও ফোন নম্বর Admin Dashboard থেকে বুকিংয়ে সংরক্ষণ করতে হবে।";
-driverBox.appendChild(warning);
-}
+      const note=document.createElement("p");
+      note.className="small";
+      note.textContent="চালকের ফোন নম্বর পাওয়া গেলে এখানে কল করার বাটন দেখা যাবে।";
+      driverBox.appendChild(note);
 
-item.appendChild(driverBox);
+     }
 
-}else{
+     if(!booking.driverName||!booking.driverPhone){
 
-addInfo(item,"Driver Assignment","এখনো চালক বরাদ্দ হয়নি");
+      const warning=document.createElement("p");
+      warning.className="small";
+      warning.textContent=
+       "চালকের নাম ও ফোন নম্বর Admin Dashboard থেকে বুকিংয়ে সংরক্ষণ করতে হবে।";
+      driverBox.appendChild(warning);
 
-}
+     }
 
-if(booking.driverResponse==="accepted"){
-addInfo(item,"Driver Response","চালক Ride গ্রহণ করেছেন");
-}
+     item.appendChild(driverBox);
 
-if(booking.driverResponse==="rejected"){
-addInfo(item,"Driver Response","চালক Ride প্রত্যাখ্যান করেছেন");
-}
+    }else{
 
-myBookings.appendChild(item);
+     addInfo(item,"Driver Assignment","এখনো চালক বরাদ্দ হয়নি");
 
-});
+    }
 
-},
-(error)=>{
+    if(booking.driverResponse==="accepted"){
+     addInfo(item,"Driver Response","চালক Ride গ্রহণ করেছেন");
+    }
 
-console.error("Booking Load Error:",error);
+    if(booking.driverResponse==="rejected"){
+     addInfo(item,"Driver Response","চালক Ride প্রত্যাখ্যান করেছেন");
+    }
 
-myBookings.textContent=
-"বুকিং লোড হয়নি। Firestore Rules পরীক্ষা করুন। Error: "+error.code;
+    myBookings.appendChild(item);
 
-}
-);
+   });
+
+  },
+  (error)=>{
+
+   console.error("Booking Load Error:",error);
+
+   myBookings.textContent=
+    "বুকিং লোড হয়নি। Firestore Rules পরীক্ষা করুন। Error: "+error.code;
+
+  }
+ );
 
 }
 
 // AUTHENTICATION
 onAuthStateChanged(auth,async(user)=>{
 
-passengerReady=false;
-bookingBtn.disabled=true;
+ passengerReady=false;
+ bookingBtn.disabled=true;
 
-if(!user){
-window.location.replace("passenger-login.html");
-return;
-}
+ if(!user){
+  window.location.replace("passenger-login.html");
+  return;
+ }
 
-try{
+ try{
 
-const profileRef=doc(db,"passengerProfiles",user.uid);
-const profileSnap=await getDoc(profileRef);
+  const profileRef=doc(db,"passengerProfiles",user.uid);
+  const profileSnap=await getDoc(profileRef);
 
-if(!profileSnap.exists()||
-profileSnap.data().role!=="passenger"){
+  if(!profileSnap.exists()||
+     profileSnap.data().role!=="passenger"){
 
-await signOut(auth);
-window.location.replace("passenger-login.html");
-return;
+   await signOut(auth);
+   window.location.replace("passenger-login.html");
+   return;
 
-}
+  }
 
-const profile=profileSnap.data();
+  const profile=profileSnap.data();
 
-nameBox.textContent="নাম: "+profile.fullName;
-emailBox.textContent="Gmail: "+profile.email;
+  nameBox.textContent="নাম: "+profile.fullName;
+  emailBox.textContent="Gmail: "+profile.email;
 
-passengerReady=true;
-bookingBtn.disabled=false;
+  passengerReady=true;
+  bookingBtn.disabled=false;
 
-loadMyBookings(user.uid);
+  loadMyBookings(user.uid);
 
-}catch(error){
+ }catch(error){
 
-console.error(error);
-nameBox.textContent="প্রোফাইল লোড করা যায়নি।";
-bookingMessage.textContent=
-"ইন্টারনেট সংযোগ পরীক্ষা করে আবার চেষ্টা করুন।";
+  console.error(error);
+  nameBox.textContent="প্রোফাইল লোড করা যায়নি।";
+  bookingMessage.textContent=
+   "ইন্টারনেট সংযোগ পরীক্ষা করে আবার চেষ্টা করুন।";
 
-}
+ }
 
 });
 
@@ -451,16 +602,16 @@ bookingMessage.textContent=
 document.getElementById("logoutBtn")
 .addEventListener("click",async()=>{
 
-if(unsubscribeBookings){
-unsubscribeBookings();
-}
+ if(unsubscribeBookings){
+  unsubscribeBookings();
+ }
 
-try{
-await signOut(auth);
-window.location.replace("passenger-login.html");
-}catch(error){
-alert("Logout করা যায়নি। আবার চেষ্টা করুন।");
-}
+ try{
+  await signOut(auth);
+  window.location.replace("passenger-login.html");
+ }catch(error){
+  alert("Logout করা যায়নি। আবার চেষ্টা করুন।");
+ }
 
 });
 
@@ -468,108 +619,108 @@ alert("Logout করা যায়নি। আবার চেষ্টা ক�
 document.getElementById("calculateBtn")
 .addEventListener("click",()=>{
 
-const pickup=document.getElementById("pickup").value.trim();
-const destination=document.getElementById("destination").value.trim();
+ const pickup=document.getElementById("pickup").value.trim();
+ const destination=document.getElementById("destination").value.trim();
 
-if(!pickup||!destination){
-alert("যাত্রা শুরুর স্থান ও গন্তব্য লিখুন।");
-return;
-}
+ if(!pickup||!destination){
+  alert("যাত্রা শুরুর স্থান ও গন্তব্য লিখুন।");
+  return;
+ }
 
-try{
+ try{
 
-const result=calculateFare();
+  const result=calculateFare();
 
-fareBox.textContent="৳"+result.total;
+  fareBox.textContent="৳"+result.total;
 
-fareDetails.textContent=
-"মূল ভাড়া ৳"+result.base+
-" + দূরত্বভাড়া ৳"+
-Math.round(result.distance*(result.vehicle==="bike"?12:20))+
-" ("+result.distance+" কিমি)";
+  fareDetails.textContent=
+   "মূল ভাড়া ৳"+result.base+
+   " + দূরত্বভাড়া ৳"+
+   Math.round(result.distance*(result.vehicle==="bike"?12:20))+
+   " ("+result.distance+" কিমি)";
 
-bookingMessage.textContent="";
+  bookingMessage.textContent="";
 
-}catch(error){
-alert(error.message);
-}
+ }catch(error){
+  alert(error.message);
+ }
 
 });
 
 // CREATE BOOKING
 bookingBtn.addEventListener("click",async()=>{
 
-if(!passengerReady||!auth.currentUser){
-bookingMessage.textContent="প্রথমে Passenger Login করুন।";
-return;
-}
+ if(!passengerReady||!auth.currentUser){
+  bookingMessage.textContent="প্রথমে Passenger Login করুন।";
+  return;
+ }
 
-const pickup=document.getElementById("pickup").value.trim();
-const destination=document.getElementById("destination").value.trim();
+ const pickup=document.getElementById("pickup").value.trim();
+ const destination=document.getElementById("destination").value.trim();
 
-if(pickup.length<2||destination.length<2){
-bookingMessage.textContent="যাত্রার স্থান ও গন্তব্য সঠিকভাবে লিখুন।";
-return;
-}
+ if(pickup.length<2||destination.length<2){
+  bookingMessage.textContent="যাত্রার স্থান ও গন্তব্য সঠিকভাবে লিখুন।";
+  return;
+ }
 
-let result;
+ let result;
 
-try{
-result=calculateFare();
-}catch(error){
-bookingMessage.textContent=error.message;
-return;
-}
+ try{
+  result=calculateFare();
+ }catch(error){
+  bookingMessage.textContent=error.message;
+  return;
+ }
 
-bookingBtn.disabled=true;
-bookingBtn.textContent="Booking হচ্ছে...";
-bookingMessage.textContent="আপনার বুকিং জমা হচ্ছে...";
+ bookingBtn.disabled=true;
+ bookingBtn.textContent="Booking হচ্ছে...";
+ bookingMessage.textContent="আপনার বুকিং জমা হচ্ছে...";
 
-try{
+ try{
 
-const bookingData={
-passengerId:auth.currentUser.uid,
-pickup:pickup,
-destination:destination,
-vehicleType:result.vehicle,
-distanceKm:result.distance,
-estimatedFare:result.total,
-status:"pending",
-createdAt:serverTimestamp()
-};
+  const bookingData={
+   passengerId:auth.currentUser.uid,
+   pickup:pickup,
+   destination:destination,
+   vehicleType:result.vehicle,
+   distanceKm:result.distance,
+   estimatedFare:result.total,
+   status:"pending",
+   createdAt:serverTimestamp()
+  };
 
-const bookingRef=await addDoc(
-collection(db,"rideBookings"),
-bookingData
-);
+  const bookingRef=await addDoc(
+   collection(db,"rideBookings"),
+   bookingData
+  );
 
-bookingMessage.style.color="green";
-bookingMessage.textContent=
-"অভিনন্দন! আপনার Ride Booking সফল হয়েছে। "+
-"বুকিং নম্বর: "+bookingRef.id+
-" | Status: Pending";
+  bookingMessage.style.color="green";
+  bookingMessage.textContent=
+   "অভিনন্দন! আপনার Ride Booking সফল হয়েছে। "+
+   "বুকিং নম্বর: "+bookingRef.id+
+   " | Status: Pending";
 
-document.getElementById("pickup").value="";
-document.getElementById("destination").value="";
-document.getElementById("distance").value="";
-fareBox.textContent="৳০";
-fareDetails.textContent=
-"দূরত্ব ও যানবাহন নির্বাচন করে ভাড়া হিসাব করুন।";
+  document.getElementById("pickup").value="";
+  document.getElementById("destination").value="";
+  document.getElementById("distance").value="";
+  fareBox.textContent="৳০";
+  fareDetails.textContent=
+   "দূরত্ব ও যানবাহন নির্বাচন করে ভাড়া হিসাব করুন।";
 
-}catch(error){
+ }catch(error){
 
-console.error("Booking Error:",error);
+  console.error("Booking Error:",error);
 
-bookingMessage.style.color="#b42318";
-bookingMessage.textContent=
-"বুকিং করা যায়নি। আবার চেষ্টা করুন। Error: "+error.code;
+  bookingMessage.style.color="#b42318";
+  bookingMessage.textContent=
+   "বুকিং করা যায়নি। আবার চেষ্টা করুন। Error: "+error.code;
 
-}finally{
+ }finally{
 
-bookingBtn.disabled=!passengerReady;
-bookingBtn.textContent="Ride Booking করুন";
+  bookingBtn.disabled=!passengerReady;
+  bookingBtn.textContent="Ride Booking করুন";
 
-}
+ }
 
 });
 
