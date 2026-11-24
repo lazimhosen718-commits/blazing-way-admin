@@ -144,6 +144,13 @@ button:disabled{opacity:.6;cursor:not-allowed}
  line-height:1.6;
 }
 </style>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin=""/>
+<style>
+.live-map{height:280px;width:100%;border-radius:10px;border:1px solid #cbd5e1;margin-top:10px}
+.track-panel{background:#eff6ff;border:1px solid #bfdbfe;padding:12px;border-radius:10px;margin-top:12px}
+.track-btn{background:#087443;color:white;border:0;padding:11px;border-radius:7px;width:100%;margin-top:8px}
+.track-note{font-size:13px;color:#475569;line-height:1.5}
+</style>
 </head>
 
 <body>
@@ -273,8 +280,8 @@ Food, Parcel, Courier, Pay এবং Offers সার্ভিসগুলো �
 
 <script type="module">
 
-import {initializeApp}
-from "https://www.gstatic.com/firebasejs/12.0.0/firebase-app.js";
+import {initializeApp} from "https://www.gstatic.com/firebasejs/12.0.0/firebase-app.js";
+import L from "https://cdn.jsdelivr.net/npm/leaflet@1.9.4/+esm";
 
 import {
  getAuth,
@@ -289,6 +296,8 @@ import {
  collection,
  addDoc,
  serverTimestamp,
+ setDoc,
+ onSnapshot as firestoreOnSnapshot,
  query,
  where,
  onSnapshot
@@ -317,6 +326,60 @@ const myBookings=document.getElementById("myBookings");
 
 let passengerReady=false;
 let unsubscribeBookings=null;
+
+
+const activeTrackers=new Map();
+function kmBetween(a,b){
+ const rad=x=>x*Math.PI/180;
+ const dLat=rad(b.lat-a.lat),dLon=rad(b.lng-a.lng);
+ const x=Math.sin(dLat/2)**2+Math.cos(rad(a.lat))*Math.cos(rad(b.lat))*Math.sin(dLon/2)**2;
+ return 6371*2*Math.atan2(Math.sqrt(x),Math.sqrt(1-x));
+}
+function startPassengerLocationShare(bookingId,uid,note){
+ if(!navigator.geolocation){note.textContent="এই ডিভাইসে GPS পাওয়া যাচ্ছে না।";return;}
+ if(activeTrackers.has(bookingId))return;
+ note.textContent="আপনার Location শেয়ার করার অনুমতি দিন...";
+ let lastWrite=0;
+ const watch=navigator.geolocation.watchPosition(async pos=>{
+  const now=Date.now(); if(now-lastWrite<8000)return; lastWrite=now;
+  try{
+   await setDoc(doc(db,"rideLocations",bookingId,"participants",uid),{
+    uid,role:"passenger",lat:pos.coords.latitude,lng:pos.coords.longitude,
+    accuracy:Math.round(pos.coords.accuracy||0),updatedAt:serverTimestamp()
+   },{merge:true});
+   note.textContent="আপনার Live Location চালকের সঙ্গে শেয়ার হচ্ছে।";
+  }catch(e){console.error(e);note.textContent="Location শেয়ার হয়নি: "+e.code;}
+ },err=>{note.textContent="GPS অনুমতি/সেবা পাওয়া যায়নি: "+err.message;},
+ {enableHighAccuracy:true,maximumAge:5000,timeout:15000});
+ activeTrackers.set(bookingId,watch);
+}
+function addPassengerLivePanel(booking,item){
+ if(!booking.driverId || !["accepted","in_progress"].includes(booking.status))return;
+ const panel=document.createElement("div");panel.className="track-panel";
+ const heading=document.createElement("h3");heading.textContent="📍 Live GPS Tracking";panel.appendChild(heading);
+ const note=document.createElement("p");note.className="track-note";note.textContent="চালকের Live Location দেখতে আপনার Location শেয়ার করুন।";panel.appendChild(note);
+ const btn=document.createElement("button");btn.className="track-btn";btn.textContent="আমার Location Share করুন";
+ btn.onclick=()=>startPassengerLocationShare(booking.id,auth.currentUser.uid,note);panel.appendChild(btn);
+ const mapBox=document.createElement("div");mapBox.className="live-map";panel.appendChild(mapBox);
+ const info=document.createElement("p");info.className="track-note";info.textContent="চালকের Location-এর অপেক্ষায়...";panel.appendChild(info);
+ item.appendChild(panel);
+ const map=L.map(mapBox).setView([23.7806,90.4070],13);
+ L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{maxZoom:19,attribution:"© OpenStreetMap"}).addTo(map);
+ let driverMarker=null,passengerMarker=null;
+ const driverRef=doc(db,"rideLocations",booking.id,"participants",booking.driverId);
+ const passengerRef=doc(db,"rideLocations",booking.id,"participants",booking.passengerId);
+ const stopDriver=firestoreOnSnapshot(driverRef,s=>{
+  if(!s.exists())return;const v=s.data();if(typeof v.lat!=="number"||typeof v.lng!=="number")return;
+  const ll=[v.lat,v.lng];if(driverMarker)driverMarker.setLatLng(ll);else driverMarker=L.marker(ll).addTo(map).bindPopup("আপনার চালক");
+  if(passengerMarker){const km=kmBetween({lat:v.lat,lng:v.lng},{lat:passengerMarker.getLatLng().lat,lng:passengerMarker.getLatLng().lng});info.textContent="চালক আনুমানিক "+km.toFixed(2)+" কিমি দূরে।";}
+  map.setView(ll,15);
+ },e=>{info.textContent="চালকের Location দেখা যাচ্ছে না: "+e.code;});
+ const stopPassenger=firestoreOnSnapshot(passengerRef,s=>{
+  if(!s.exists())return;const v=s.data();if(typeof v.lat!=="number"||typeof v.lng!=="number")return;
+  const ll=[v.lat,v.lng];if(passengerMarker)passengerMarker.setLatLng(ll);else passengerMarker=L.marker(ll).addTo(map).bindPopup("আপনার অবস্থান");
+ },()=>{});
+ map.whenReady(()=>setTimeout(()=>map.invalidateSize(),250));
+}
 
 // SERVICE SELECTION
 document.querySelectorAll(".service").forEach(button=>{
@@ -536,6 +599,7 @@ function loadMyBookings(uid){
      addInfo(item,"Driver Response","চালক Ride প্রত্যাখ্যান করেছেন");
     }
 
+    addPassengerLivePanel(booking,item);
     myBookings.appendChild(item);
 
    });
