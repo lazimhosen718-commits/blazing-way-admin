@@ -51,9 +51,7 @@ button{
  cursor:pointer;
 }
 button:disabled{opacity:.5}
-.reset-btn{
- background:#16804a;
-}
+.reset-btn{background:#16804a}
 #message{
  overflow-wrap:anywhere;
  font-weight:bold;
@@ -172,6 +170,11 @@ throw new Error("not-passenger");
 message.style.color="green";
 message.textContent="Passenger Login সফল হয়েছে!";
 
+loginBtn.textContent="Dashboard খুলছে...";
+
+// LOGIN সফল হলে Dashboard-এ পাঠাবে
+window.location.replace("passenger-dashboard.html");
+
 }catch(error){
 
 console.error("Passenger Login Error:",error);
@@ -190,7 +193,7 @@ const errors={
 message.textContent=
 errors[error.message] ||
 errors[error.code] ||
-"সমস্যা হয়েছে: "+error.code;
+"সমস্যা হয়েছে: "+(error.code || error.message);
 
 }finally{
 
