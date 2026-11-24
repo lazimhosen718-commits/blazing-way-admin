@@ -309,6 +309,8 @@ let stopMerchantWallets=null;
 let stopFoodRiderWallets=null;
 let stopFoodLedger=null;
 let stopAdminAccounts=null;
+let currentAdminRoles=[];
+let currentIsSuperAdmin=false;
 
 let availableDrivers=[];
 let latestBookingDocs=[];
@@ -389,6 +391,35 @@ function loadAdminAccounts(){
  },error=>{$("adminAccountList").textContent="Admin list load হয়নি: "+error.code;});
 }
 
+function hideAdminCardById(id,show){
+ const node=$(id);if(!node)return;
+ const card=node.closest(".card")||node.parentElement;
+ if(card)card.style.display=show?"":"none";
+}
+function applyAdminRoleVisibility(){
+ const ride=currentIsSuperAdmin||currentAdminRoles.includes("ride");
+ const food=currentIsSuperAdmin||currentAdminRoles.includes("food");
+ const foodRider=currentIsSuperAdmin||currentAdminRoles.includes("food_rider");
+ const finance=currentIsSuperAdmin||currentAdminRoles.includes("finance");
+ const support=currentIsSuperAdmin||currentAdminRoles.includes("support");
+ const system=currentIsSuperAdmin||currentAdminRoles.includes("system");
+ ["onlineDrivers","applications","rideBookings"].forEach(id=>hideAdminCardById(id,ride));
+ ["foodCustomers","foodMerchants"].forEach(id=>hideAdminCardById(id,food));
+ ["foodRiders"].forEach(id=>hideAdminCardById(id,food||foodRider));
+ ["foodOrders"].forEach(id=>hideAdminCardById(id,food||foodRider));
+ ["depositRequests"].forEach(id=>hideAdminCardById(id,finance));
+ ["adminAccountManagement"].forEach(id=>hideAdminCardById(id,currentIsSuperAdmin));
+ // Ride payment and Finance-only controls are not exposed to unrelated service admins.
+ const headings=[...document.querySelectorAll("h2")];
+ headings.forEach(h=>{
+  const t=(h.textContent||"").toLowerCase();
+  if(t.includes("driver payment")){const card=h.closest(".card");if(card)card.style.display=(ride||finance)?"":"none";}
+  if(t.includes("food wallet")){const card=h.closest(".card");if(card)card.style.display=(food||foodRider||finance)?"":"none";}
+ });
+ const welcome=document.querySelector("#dashboard > .card h2");
+ if(welcome)welcome.textContent=currentIsSuperAdmin?"স্বাগতম, Super Admin!":"স্বাগতম, Service Admin!";
+}
+
 // AUTH CHECK
 onAuthStateChanged(auth,async user=>{
 
@@ -427,18 +458,23 @@ onAuthStateChanged(auth,async user=>{
  try{
   const token=await getIdTokenResult(user,true);
 
-  if(token.claims.admin===true){
+  currentIsSuperAdmin=token.claims.admin===true;
+  currentAdminRoles=Array.isArray(token.claims.adminRoles)?token.claims.adminRoles:[];
+  if(currentIsSuperAdmin || currentAdminRoles.length){
    $("login").style.display="none";
    $("dashboard").style.display="block";
+   applyAdminRoleVisibility();
 
-   loadApplications();
-   loadOnlineDrivers();
-   loadRideBookings();
-   loadPayments();
-   loadDepositRequests();
-   loadFoodDeliveryAdmin();
-   loadAdminAccounts();
-
+   if(currentIsSuperAdmin || currentAdminRoles.includes("ride")){
+    loadApplications();loadOnlineDrivers();loadRideBookings();
+   }
+   if(currentIsSuperAdmin || currentAdminRoles.includes("finance")){
+    loadPayments();loadDepositRequests();
+   }
+   if(currentIsSuperAdmin || currentAdminRoles.includes("food") || currentAdminRoles.includes("food_rider")){
+    loadFoodDeliveryAdmin();
+   }
+   if(currentIsSuperAdmin)loadAdminAccounts();
   }else{
    await signOut(auth);
    $("login").style.display="block";
