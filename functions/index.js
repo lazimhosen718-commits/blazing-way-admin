@@ -1,6 +1,7 @@
 const { onCall, HttpsError } = require("firebase-functions/v2/https");
 const { setGlobalOptions } = require("firebase-functions/v2");
 const { initializeApp } = require("firebase-admin/app");
+const { getAuth } = require("firebase-admin/auth");
 const { getFirestore, FieldValue } = require("firebase-admin/firestore");
 const crypto = require("node:crypto");
 
@@ -636,4 +637,111 @@ exports.updateFoodDeliveryStatus = onCall(async (request) => {
     });
   });
   return { success: true, orderId, status: nextStatus };
+});
+
+
+/**
+ * ADMIN CONTROL: Only the existing Super Admin (legacy admin custom claim)
+ * may provision or change service-admin accounts. Never expose Admin SDK
+ * credentials to the browser.
+ */
+const ADMIN_ROLES = ["ride", "food", "food_rider", "finance", "support", "system"];
+
+function requireSuperAdmin(request) {
+  if (!request.auth || request.auth.token.admin !== true) {
+    throw new HttpsError("permission-denied", "শুধু Super Admin এই কাজ করতে পারবেন।");
+  }
+  return request.auth.uid;
+}
+
+exports.createServiceAdmin = onCall(async (request) => {
+  const actorUid = requireSuperAdmin(request);
+  const email = String(request.data?.email || "").trim().toLowerCase();
+  const password = String(request.data?.password || "");
+  const displayName = String(request.data?.displayName || "").trim();
+  const role = String(request.data?.role || "").trim();
+
+  if (!/^\S+@\S+\.\S+$/.test(email) || password.length < 8 ||
+      displayName.length < 2 || displayName.length > 100 ||
+      !ADMIN_ROLES.includes(role)) {
+    throw new HttpsError("invalid-argument", "সঠিক নাম, Email, কমপক্ষে ৮ অক্ষরের Password এবং Admin Role দিন।");
+  }
+
+  let user;
+  try {
+    user = await getAuth().createUser({ email, password, displayName, disabled: false });
+    await getAuth().setCustomUserClaims(user.uid, {
+      admin: false,
+      superAdmin: false,
+      adminRoles: [role]
+    });
+    await db.collection("adminAccounts").doc(user.uid).set({
+      uid: user.uid, email, displayName, role, status: "active",
+      createdBy: actorUid, createdAt: FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp()
+    });
+    await db.collection("adminAuditLogs").add({
+      actorUid, targetUid: user.uid, action: "admin_created", role,
+      createdAt: FieldValue.serverTimestamp()
+    });
+    return { success: true, uid: user.uid, email, role };
+  } catch (error) {
+    if (user?.uid) {
+      await getAuth().deleteUser(user.uid).catch(() => {});
+    }
+    if (error instanceof HttpsError) throw error;
+    if (error.code === "auth/email-already-exists") {
+      throw new HttpsError("already-exists", "এই Email দিয়ে আগে থেকেই অ্যাকাউন্ট আছে।");
+    }
+    console.error("createServiceAdmin:", error);
+    throw new HttpsError("internal", "Admin অ্যাকাউন্ট তৈরি করা যায়নি।");
+  }
+});
+
+exports.changeServiceAdminRole = onCall(async (request) => {
+  const actorUid = requireSuperAdmin(request);
+  const uid = String(request.data?.uid || "").trim();
+  const role = String(request.data?.role || "").trim();
+  if (!uid || uid === actorUid || !ADMIN_ROLES.includes(role)) {
+    throw new HttpsError("invalid-argument", "সঠিক Admin UID ও Role দিন।");
+  }
+  const user = await getAuth().getUser(uid);
+  if (user.customClaims?.admin === true) {
+    throw new HttpsError("failed-precondition", "Super Admin-এর Role এখানে পরিবর্তন করা যাবে না।");
+  }
+  await getAuth().setCustomUserClaims(uid, {
+    ...(user.customClaims || {}), admin: false, superAdmin: false, adminRoles: [role]
+  });
+  await db.collection("adminAccounts").doc(uid).set({
+    uid, email: user.email || "", displayName: user.displayName || "",
+    role, status: user.disabled ? "disabled" : "active",
+    updatedBy: actorUid, updatedAt: FieldValue.serverTimestamp()
+  }, { merge: true });
+  await db.collection("adminAuditLogs").add({
+    actorUid, targetUid: uid, action: "admin_role_changed", role,
+    createdAt: FieldValue.serverTimestamp()
+  });
+  return { success: true, uid, role };
+});
+
+exports.disableServiceAdmin = onCall(async (request) => {
+  const actorUid = requireSuperAdmin(request);
+  const uid = String(request.data?.uid || "").trim();
+  if (!uid || uid === actorUid) throw new HttpsError("invalid-argument", "নিজের ID বা ফাঁকা UID নিষ্ক্রিয় করা যাবে না।");
+  const user = await getAuth().getUser(uid);
+  if (user.customClaims?.admin === true) {
+    throw new HttpsError("failed-precondition", "Super Admin ID নিষ্ক্রিয় করা যাবে না।");
+  }
+  await getAuth().updateUser(uid, { disabled: true });
+  await getAuth().setCustomUserClaims(uid, {
+    ...(user.customClaims || {}), admin: false, superAdmin: false, adminRoles: []
+  });
+  await db.collection("adminAccounts").doc(uid).set({
+    status: "disabled", updatedBy: actorUid, updatedAt: FieldValue.serverTimestamp()
+  }, { merge: true });
+  await db.collection("adminAuditLogs").add({
+    actorUid, targetUid: uid, action: "admin_disabled",
+    createdAt: FieldValue.serverTimestamp()
+  });
+  return { success: true, uid, status: "disabled" };
 });
