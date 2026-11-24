@@ -172,6 +172,28 @@ Admin-এর ১% কমিশন আলাদা।
 
 </div>
 
+<!-- PASSENGER DEPOSIT APPROVAL -->
+<div class="card">
+ <h2>💳 Passenger Deposit Approval</h2>
+ <p class="small">যাত্রীর পাঠানো টাকা ও Transaction ID যাচাই করে তারপর Approve করুন। Approve করলে একই Firestore transaction-এ Wallet Balance, Deposit Status এবং Transaction History আপডেট হবে। একই Request দ্বিতীয়বার অনুমোদন করা যাবে না।</p>
+ <div class="grid">
+  <div class="paymentSummary">
+   <h3>মোট Request</h3>
+   <p id="depositTotal">0</p>
+  </div>
+  <div class="paymentSummary">
+   <h3>Pending</h3>
+   <p id="depositPending">0</p>
+  </div>
+  <div class="paymentSummary">
+   <h3>Approved</h3>
+   <p id="depositApproved">0</p>
+  </div>
+ </div>
+ <div id="depositRequests">Deposit Request লোড হচ্ছে...</div>
+ <p id="depositMessage" class="small"></p>
+</div>
+
 </div>
 </main>
 
@@ -186,7 +208,7 @@ import {
 
 import {
  getFirestore,collection,onSnapshot,doc,updateDoc,
- serverTimestamp,query,where,getDoc,addDoc
+ serverTimestamp,query,where,getDoc,addDoc,runTransaction
 } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-firestore.js";
 
 const COMMISSION_RATE=0.01;
@@ -210,11 +232,13 @@ let stopApplications=null;
 let stopPresence=null;
 let stopBookings=null;
 let stopPayments=null;
+let stopDeposits=null;
 
 let availableDrivers=[];
 let latestBookingDocs=[];
 let latestPaymentDocs=[];
 let latestApplicationDocs=[];
+let latestDepositDocs=[];
 
 let presenceVersion=0;
 let migratingBookings=new Set();
@@ -257,8 +281,9 @@ onAuthStateChanged(auth,async user=>{
  if(stopPresence)stopPresence();
  if(stopBookings)stopBookings();
  if(stopPayments)stopPayments();
+ if(stopDeposits)stopDeposits();
 
- stopApplications=stopPresence=stopBookings=stopPayments=null;
+ stopApplications=stopPresence=stopBookings=stopPayments=stopDeposits=null;
 
  availableDrivers=[];
  latestBookingDocs=[];
@@ -284,6 +309,7 @@ onAuthStateChanged(auth,async user=>{
    loadOnlineDrivers();
    loadRideBookings();
    loadPayments();
+   loadDepositRequests();
 
   }else{
    await signOut(auth);
@@ -1168,6 +1194,181 @@ function renderPaymentHistory(){
 
   area.appendChild(card);
  });
+}
+
+// =================================
+// PASSENGER DEPOSIT APPROVAL
+// =================================
+function loadDepositRequests(){
+ $("depositRequests").textContent="Deposit Request লোড হচ্ছে...";
+ stopDeposits=onSnapshot(collection(db,"depositRequests"),snapshot=>{
+  latestDepositDocs=snapshot.docs;
+  renderDepositRequests();
+ },error=>{
+  console.error("Deposit requests:",error);
+  $("depositRequests").textContent="Deposit Request লোড হয়নি: "+error.code;
+ });
+}
+
+function renderDepositRequests(){
+ const area=$("depositRequests");
+ area.replaceChildren();
+ const pending=latestDepositDocs.filter(x=>x.data().status==="pending").length;
+ const approved=latestDepositDocs.filter(x=>x.data().status==="approved").length;
+ $("depositTotal").textContent=String(latestDepositDocs.length);
+ $("depositPending").textContent=String(pending);
+ $("depositApproved").textContent=String(approved);
+
+ if(!latestDepositDocs.length){
+  area.textContent="এখনো কোনো Deposit Request আসেনি।";
+  return;
+ }
+
+ const sorted=[...latestDepositDocs].sort((a,b)=>
+  (b.data().createdAt?.toMillis?.()||0)-(a.data().createdAt?.toMillis?.()||0)
+ );
+
+ sorted.forEach(item=>{
+  const d=item.data();
+  const card=document.createElement("div");
+  card.className="paymentCard";
+  const title=document.createElement("h3");
+  title.textContent="Deposit Request — ৳"+money(d.amount);
+  const status=document.createElement("p");
+  status.textContent="অবস্থা: "+(d.status||"unknown");
+  status.className=d.status==="approved"?"approved":d.status==="pending"?"pending":"rejected";
+  function line(label,value){
+   const p=document.createElement("p");
+   p.textContent=label+": "+value;
+   return p;
+  }
+  const date=d.createdAt?.toDate?d.createdAt.toDate().toLocaleString("bn-BD"):"সময় পাওয়া যায়নি";
+  card.append(
+   title,
+   line("Request ID",item.id),
+   line("Passenger UID",d.passengerId||"নেই"),
+   line("Amount","৳"+money(d.amount)),
+   line("Payment Method",d.method||"নেই"),
+   line("Transaction ID",d.transactionId||"নেই"),
+   line("জমার সময়",date),
+   status
+  );
+
+  if(d.status==="approved"){
+   card.appendChild(line("অনুমোদনকারী",d.reviewedBy||"নেই"));
+  }
+
+  if(d.status==="pending"){
+   const approve=document.createElement("button");
+   approve.textContent="Approve & Add Balance";
+   approve.className="approveBtn";
+   const reject=document.createElement("button");
+   reject.textContent="Reject Request";
+   reject.className="rejectBtn";
+
+   approve.onclick=()=>reviewDeposit(item.id,"approved",approve,reject);
+   reject.onclick=()=>reviewDeposit(item.id,"rejected",approve,reject);
+   card.append(approve,reject);
+  }
+  area.appendChild(card);
+ });
+}
+
+async function reviewDeposit(requestId,status,approveButton,rejectButton){
+ if(!auth.currentUser)return;
+ const item=latestDepositDocs.find(x=>x.id===requestId);
+ if(!item){alert("Request পাওয়া যায়নি।");return}
+ const d=item.data();
+
+ if(d.status!=="pending"){
+  alert("এই Request ইতিমধ্যে Review করা হয়েছে।");
+  return;
+ }
+
+ const amount=Number(d.amount);
+ const passengerId=String(d.passengerId||"");
+ if(status==="approved"&&(!passengerId||!Number.isInteger(amount)||amount<10||amount>50000)){
+  alert("Request-এর তথ্য সঠিক নয়। Approve করা বন্ধ রাখা হয়েছে।");
+  return;
+ }
+
+ const prompt=status==="approved"
+  ? "৳"+money(amount)+" কি Passenger Wallet-এ যোগ করবেন?\n\nTransaction ID: "+(d.transactionId||"")
+  : "এই Deposit Request Reject করবেন?";
+ if(!confirm(prompt))return;
+
+ approveButton.disabled=true;
+ rejectButton.disabled=true;
+ $("depositMessage").textContent="Request আপডেট হচ্ছে...";
+
+ try{
+  if(status==="approved"){
+   const requestRef=doc(db,"depositRequests",requestId);
+   const walletRef=doc(db,"passengerWallets",passengerId);
+   // Request ID is also the ledger document ID: this prevents duplicate credit.
+   const ledgerRef=doc(db,"walletTransactions",requestId);
+
+   await runTransaction(db,async transaction=>{
+    const requestSnap=await transaction.get(requestRef);
+    if(!requestSnap.exists())throw new Error("REQUEST_NOT_FOUND");
+    const fresh=requestSnap.data();
+    if(fresh.status!=="pending")throw new Error("REQUEST_ALREADY_REVIEWED");
+    if(fresh.passengerId!==passengerId)throw new Error("PASSENGER_MISMATCH");
+
+    const walletSnap=await transaction.get(walletRef);
+    const ledgerSnap=await transaction.get(ledgerRef);
+    if(ledgerSnap.exists())throw new Error("DUPLICATE_LEDGER");
+    const oldBalance=walletSnap.exists()?Number(walletSnap.data().balance||0):0;
+    if(!Number.isFinite(oldBalance)||oldBalance<0)throw new Error("INVALID_WALLET_BALANCE");
+
+    transaction.set(walletRef,{
+     balance:Number((oldBalance+amount).toFixed(2)),
+     updatedAt:serverTimestamp()
+    },{merge:true});
+
+    transaction.update(requestRef,{
+     status:"approved",
+     reviewedBy:auth.currentUser.uid,
+     reviewedAt:serverTimestamp()
+    });
+
+    transaction.set(ledgerRef,{
+     userId:passengerId,
+     passengerId,
+     type:"deposit",
+     amount,
+     method:fresh.method,
+     transactionId:fresh.transactionId,
+     depositRequestId:requestId,
+     createdAt:serverTimestamp()
+    });
+   });
+   $("depositMessage").textContent="Deposit অনুমোদিত হয়েছে এবং Wallet Balance যোগ হয়েছে।";
+   alert("Deposit Approved! Passenger Wallet-এ ৳"+money(amount)+" যোগ হয়েছে।");
+  }else{
+   await updateDoc(doc(db,"depositRequests",requestId),{
+    status:"rejected",
+    reviewedBy:auth.currentUser.uid,
+    reviewedAt:serverTimestamp()
+   });
+   $("depositMessage").textContent="Deposit Request Reject করা হয়েছে।";
+   alert("Deposit Request Reject হয়েছে।");
+  }
+ }catch(error){
+  console.error("Deposit approval:",error);
+  const reason=({
+   REQUEST_NOT_FOUND:"Request পাওয়া যায়নি।",
+   REQUEST_ALREADY_REVIEWED:"Request আগেই Review করা হয়েছে।",
+   PASSENGER_MISMATCH:"Passenger তথ্য মিলছে না।",
+   DUPLICATE_LEDGER:"এই Request-এর টাকা আগে যোগ করা হয়েছে।",
+   INVALID_WALLET_BALANCE:"Wallet-এর বর্তমান Balance সঠিক নয়।"
+  })[error.message];
+  $("depositMessage").textContent="কাজটি সম্পন্ন হয়নি: "+(reason||error.code||error.message);
+  alert("Deposit আপডেট হয়নি: "+(reason||error.code||error.message));
+ }finally{
+  approveButton.disabled=false;
+  rejectButton.disabled=false;
+ }
 }
 
 // LOGOUT
