@@ -527,7 +527,7 @@ service cloud.firestore {
     // Food wallet ledger is private to its owner and Admin.
     // Only trusted server code should create immutable fee/credit entries.
     match /foodWalletTransactions/{entryId} {
-      allow read: if (isFinanceAdmin() || isFoodAdmin() || isFoodRiderAdmin())
+      allow read: if (isFinanceAdmin() || isFoodAdmin())
         || (signedIn() && resource.data.ownerId == request.auth.uid);
 
       allow create, update, delete: if false;
