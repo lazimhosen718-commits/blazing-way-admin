@@ -194,6 +194,54 @@ Admin-এর ১% কমিশন আলাদা।
  <p id="depositMessage" class="small"></p>
 </div>
 
+
+<!-- FOOD DELIVERY SUPER ADMIN MANAGEMENT -->
+<div class="card">
+ <h2>🍔 Food Delivery Management</h2>
+ <p class="small">Food Customer, Merchant, Food Rider, Orders, Wallet Balance ও ৳১ নির্ধারিত Fee পর্যবেক্ষণ। Ride Sharing-এর হিসাব অপরিবর্তিত থাকবে।</p>
+ <div class="grid">
+  <div class="paymentSummary"><h3>Food Customer</h3><p id="foodCustomerCount">লোড হচ্ছে...</p></div>
+  <div class="paymentSummary"><h3>Merchant</h3><p id="merchantCount">লোড হচ্ছে...</p></div>
+  <div class="paymentSummary"><h3>Food Rider</h3><p id="foodRiderCount">লোড হচ্ছে...</p></div>
+  <div class="paymentSummary"><h3>Food Orders</h3><p id="foodOrderCount">লোড হচ্ছে...</p></div>
+ </div>
+</div>
+
+<div class="card">
+ <h2>👤 Food Customer Management</h2>
+ <div id="foodCustomers">লোড হচ্ছে...</div>
+</div>
+
+<div class="card">
+ <h2>🏪 Merchant Management</h2>
+ <p class="small">Pending Merchant আবেদন Approve/Reject এবং প্রয়োজন হলে Suspend করা যাবে।</p>
+ <div id="foodMerchants">লোড হচ্ছে...</div>
+</div>
+
+<div class="card">
+ <h2>🛵 Food Rider Management</h2>
+ <p class="small">Pending Food Rider আবেদন Approve/Reject এবং প্রয়োজন হলে Suspend করা যাবে।</p>
+ <div id="foodRiders">লোড হচ্ছে...</div>
+</div>
+
+<div class="card">
+ <h2>📦 Food Order Monitoring</h2>
+ <div id="foodOrders">লোড হচ্ছে...</div>
+</div>
+
+<div class="card">
+ <h2>💳 Food Wallet & Platform Fee Report</h2>
+ <p class="small">প্রতি Merchant accepted order-এ ৳১ এবং প্রতি Food Rider accepted delivery-তে ৳১। এই ফি একবারই কাটা হয়। বাতিল অর্ডারের জন্য অতিরিক্ত ৫% কমিশন নেই।</p>
+ <div class="grid">
+  <div class="paymentSummary"><h3>Merchant Wallet Balance</h3><p id="merchantWalletTotal">৳0.00</p></div>
+  <div class="paymentSummary"><h3>Food Rider Wallet Balance</h3><p id="foodRiderWalletTotal">৳0.00</p></div>
+  <div class="paymentSummary"><h3>Merchant ৳১ Fees</h3><p id="merchantFeeTotal">৳0.00</p></div>
+  <div class="paymentSummary"><h3>Rider ৳১ Fees</h3><p id="riderFeeTotal">৳0.00</p></div>
+ </div>
+ <h3>সাম্প্রতিক Food Wallet Transactions</h3>
+ <div id="foodWalletLedger">লোড হচ্ছে...</div>
+</div>
+
 </div>
 </main>
 
@@ -233,12 +281,33 @@ let stopPresence=null;
 let stopBookings=null;
 let stopPayments=null;
 let stopDeposits=null;
+let stopFoodCustomers=null;
+let stopMerchants=null;
+let stopFoodRiders=null;
+let stopFoodOrders=null;
+let stopMerchantWallets=null;
+let stopFoodRiderWallets=null;
+let stopFoodLedger=null;
 
 let availableDrivers=[];
 let latestBookingDocs=[];
 let latestPaymentDocs=[];
 let latestApplicationDocs=[];
 let latestDepositDocs=[];
+ latestFoodCustomerDocs=[];
+ latestMerchantDocs=[];
+ latestFoodRiderDocs=[];
+ latestFoodOrderDocs=[];
+ latestMerchantWalletDocs=[];
+ latestFoodRiderWalletDocs=[];
+ latestFoodLedgerDocs=[];
+let latestFoodCustomerDocs=[];
+let latestMerchantDocs=[];
+let latestFoodRiderDocs=[];
+let latestFoodOrderDocs=[];
+let latestMerchantWalletDocs=[];
+let latestFoodRiderWalletDocs=[];
+let latestFoodLedgerDocs=[];
 
 let presenceVersion=0;
 let migratingBookings=new Set();
@@ -282,8 +351,17 @@ onAuthStateChanged(auth,async user=>{
  if(stopBookings)stopBookings();
  if(stopPayments)stopPayments();
  if(stopDeposits)stopDeposits();
+ if(stopFoodCustomers)stopFoodCustomers();
+ if(stopMerchants)stopMerchants();
+ if(stopFoodRiders)stopFoodRiders();
+ if(stopFoodOrders)stopFoodOrders();
+ if(stopMerchantWallets)stopMerchantWallets();
+ if(stopFoodRiderWallets)stopFoodRiderWallets();
+ if(stopFoodLedger)stopFoodLedger();
 
  stopApplications=stopPresence=stopBookings=stopPayments=stopDeposits=null;
+ stopFoodCustomers=stopMerchants=stopFoodRiders=stopFoodOrders=null;
+ stopMerchantWallets=stopFoodRiderWallets=stopFoodLedger=null;
 
  availableDrivers=[];
  latestBookingDocs=[];
@@ -310,6 +388,7 @@ onAuthStateChanged(auth,async user=>{
    loadRideBookings();
    loadPayments();
    loadDepositRequests();
+   loadFoodDeliveryAdmin();
 
   }else{
    await signOut(auth);
@@ -1369,6 +1448,139 @@ async function reviewDeposit(requestId,status,approveButton,rejectButton){
   approveButton.disabled=false;
   rejectButton.disabled=false;
  }
+}
+
+
+/* FOOD DELIVERY ADMIN: read live data; approval updates are admin-only under Firestore Rules. */
+function foodLine(label,value){
+ const p=document.createElement("p");
+ p.textContent=label+": "+String(value??"—");
+ return p;
+}
+function foodCard(title,lines){
+ const card=document.createElement("div");
+ card.className="paymentCard";
+ const h=document.createElement("h3");h.textContent=title;card.appendChild(h);
+ lines.forEach(([k,v])=>card.appendChild(foodLine(k,v)));
+ return card;
+}
+function setFoodCount(id,docs){
+ const pending=docs.filter(x=>x.data().status==="pending").length;
+ $(id).textContent="মোট: "+docs.length+" | Pending: "+pending;
+}
+function reviewFoodProfile(collectionName,id,status,button){
+ if(!auth.currentUser)return;
+ const verb=status==="approved"?"Approve":status==="rejected"?"Reject":"Suspend";
+ if(!confirm("এই অ্যাকাউন্ট "+verb+" করবেন?"))return;
+ button.disabled=true;
+ updateDoc(doc(db,collectionName,id),{
+  status,reviewedBy:auth.currentUser.uid,reviewedAt:serverTimestamp()
+ }).then(()=>alert("অ্যাকাউন্টের অবস্থা "+status+" করা হয়েছে।"))
+ .catch(error=>{console.error(error);alert("আপডেট হয়নি: "+error.code);button.disabled=false;});
+}
+function renderFoodProfiles(docs,areaId,collectionName,kind){
+ const area=$(areaId);area.replaceChildren();
+ if(!docs.length){area.textContent="কোনো তথ্য পাওয়া যায়নি।";return;}
+ docs.forEach(item=>{
+  const d=item.data();
+  const title=kind==="merchant"?(d.businessName||"Merchant"):(d.fullName||"Food Rider");
+  const card=foodCard(title,[
+   ["UID",item.id],["Owner/নাম",d.ownerName||d.fullName||"—"],
+   ["Email",d.email||"—"],["মোবাইল",d.phone||"—"],["অবস্থা",d.status||"approved"],
+   ["আবেদনের সময়",d.createdAt?.toDate?d.createdAt.toDate().toLocaleString("bn-BD"):"—"]
+  ]);
+  if(d.status!=="approved"){
+   const approve=document.createElement("button");approve.textContent="Approve";approve.className="approveBtn";
+   approve.onclick=()=>reviewFoodProfile(collectionName,item.id,"approved",approve);card.appendChild(approve);
+  }
+  if(d.status!=="rejected"){
+   const reject=document.createElement("button");reject.textContent="Reject";reject.className="rejectBtn";
+   reject.onclick=()=>reviewFoodProfile(collectionName,item.id,"rejected",reject);card.appendChild(reject);
+  }
+  if(d.status==="approved"){
+   const suspend=document.createElement("button");suspend.textContent="Suspend";suspend.className="offlineBtn";
+   suspend.onclick=()=>reviewFoodProfile(collectionName,item.id,"suspended",suspend);card.appendChild(suspend);
+  }
+  area.appendChild(card);
+ });
+}
+function renderFoodCustomers(){
+ const area=$("foodCustomers");area.replaceChildren();
+ if(!latestFoodCustomerDocs.length){area.textContent="এখনো Food Customer নেই।";return;}
+ latestFoodCustomerDocs.forEach(item=>{
+  const d=item.data();
+  area.appendChild(foodCard(d.fullName||"Food Customer",[
+   ["Customer UID",item.id],["Email",d.email||"—"],["মোবাইল",d.phone||"—"],
+   ["Registration",d.createdAt?.toDate?d.createdAt.toDate().toLocaleString("bn-BD"):"—"]
+  ]));
+ });
+}
+function renderFoodOrders(){
+ const area=$("foodOrders");area.replaceChildren();
+ const docs=[...latestFoodOrderDocs].sort((a,b)=>(b.data().createdAt?.toMillis?.()||0)-(a.data().createdAt?.toMillis?.()||0));
+ if(!docs.length){area.textContent="এখনো Food Order নেই।";return;}
+ docs.forEach(item=>{
+  const d=item.data();
+  area.appendChild(foodCard("Food Order — "+item.id,[
+   ["Customer",d.customerName||d.customerId||"—"],["Customer Mobile",d.customerPhone||"—"],
+   ["Merchant",d.merchantName||d.merchantId||"—"],["Assigned Rider",d.riderId||d.assignedRiderId||"—"],
+   ["Items",Array.isArray(d.items)?d.items.map(x=>(x.itemName||x.name||"খাবার")+" × "+(x.quantity||1)).join(", "):"—"],
+   ["Subtotal","৳"+money(d.subtotal)],["Customer Service Charge",d.serviceChargePaid===true?"Paid ৳"+money(d.serviceCharge):"পরিশোধ হয়নি"],
+   ["Delivery Address",d.deliveryAddress||"—"],["Status",d.status||"—"],
+   ["Merchant Fee",d.merchantAcceptanceFee===1?"৳১ কাটা হয়েছে":"—"],
+   ["Rider Fee",d.riderAcceptanceFee===1?"৳১ কাটা হয়েছে":"—"],
+   ["Order Time",d.createdAt?.toDate?d.createdAt.toDate().toLocaleString("bn-BD"):"—"]
+  ]));
+ });
+}
+function renderFoodWalletReport(){
+ let merchantBalance=0,riderBalance=0,merchantFees=0,riderFees=0;
+ latestMerchantWalletDocs.forEach(x=>merchantBalance+=Number(x.data().balance||0));
+ latestFoodRiderWalletDocs.forEach(x=>riderBalance+=Number(x.data().balance||0));
+ latestFoodLedgerDocs.forEach(x=>{
+  const d=x.data();
+  if(d.type==="merchant_acceptance_fee")merchantFees+=Number(d.amount||0);
+  if(d.type==="rider_acceptance_fee")riderFees+=Number(d.amount||0);
+ });
+ $("merchantWalletTotal").textContent="৳"+money(merchantBalance);
+ $("foodRiderWalletTotal").textContent="৳"+money(riderBalance);
+ $("merchantFeeTotal").textContent="৳"+money(merchantFees);
+ $("riderFeeTotal").textContent="৳"+money(riderFees);
+ const area=$("foodWalletLedger");area.replaceChildren();
+ const docs=[...latestFoodLedgerDocs].sort((a,b)=>(b.data().createdAt?.toMillis?.()||0)-(a.data().createdAt?.toMillis?.()||0)).slice(0,50);
+ if(!docs.length){area.textContent="এখনো Food Wallet Transaction নেই।";return;}
+ docs.forEach(item=>{
+  const d=item.data();
+  area.appendChild(foodCard(d.ownerRole==="merchant"?"Merchant Fee":"Food Rider Fee",[
+   ["Transaction ID",item.id],["Owner UID",d.ownerId||"—"],["Order ID",d.orderId||"—"],
+   ["Type",d.type||"—"],["Amount","৳"+money(d.amount)],
+   ["Date",d.createdAt?.toDate?d.createdAt.toDate().toLocaleString("bn-BD"):"—"]
+  ]));
+ });
+}
+function loadFoodDeliveryAdmin(){
+ stopFoodCustomers=onSnapshot(collection(db,"foodCustomerProfiles"),s=>{
+  latestFoodCustomerDocs=s.docs;$("foodCustomerCount").textContent="মোট: "+s.size;renderFoodCustomers();
+ },e=>{$("foodCustomers").textContent="Customer data load হয়নি: "+e.code;});
+ stopMerchants=onSnapshot(collection(db,"merchantProfiles"),s=>{
+  latestMerchantDocs=s.docs;setFoodCount("merchantCount",s.docs);renderFoodProfiles(s.docs,"foodMerchants","merchantProfiles","merchant");
+ },e=>{$("foodMerchants").textContent="Merchant data load হয়নি: "+e.code;});
+ stopFoodRiders=onSnapshot(collection(db,"foodRiderProfiles"),s=>{
+  latestFoodRiderDocs=s.docs;setFoodCount("foodRiderCount",s.docs);renderFoodProfiles(s.docs,"foodRiders","foodRiderProfiles","rider");
+ },e=>{$("foodRiders").textContent="Food Rider data load হয়নি: "+e.code;});
+ stopFoodOrders=onSnapshot(collection(db,"foodOrders"),s=>{
+  latestFoodOrderDocs=s.docs;const pending=s.docs.filter(x=>["pending","accepted","ready","rider_assigned","picked_up"].includes(x.data().status)).length;
+  $("foodOrderCount").textContent="মোট: "+s.size+" | চলমান: "+pending;renderFoodOrders();
+ },e=>{$("foodOrders").textContent="Food Order load হয়নি: "+e.code;});
+ stopMerchantWallets=onSnapshot(collection(db,"merchantWallets"),s=>{
+  latestMerchantWalletDocs=s.docs;renderFoodWalletReport();
+ },e=>console.error("Merchant wallets:",e));
+ stopFoodRiderWallets=onSnapshot(collection(db,"foodRiderWallets"),s=>{
+  latestFoodRiderWalletDocs=s.docs;renderFoodWalletReport();
+ },e=>console.error("Food rider wallets:",e));
+ stopFoodLedger=onSnapshot(collection(db,"foodWalletTransactions"),s=>{
+  latestFoodLedgerDocs=s.docs;renderFoodWalletReport();
+ },e=>{$("foodWalletLedger").textContent="Ledger load হয়নি: "+e.code;});
 }
 
 // LOGOUT
