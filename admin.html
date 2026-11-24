@@ -292,7 +292,8 @@ const app=initializeApp({
 });
 
 const auth=getAuth(app);
-const db=getFirestore(app);\nconst functions=getFunctions(app,"asia-south1");
+const db=getFirestore(app);
+const functions=getFunctions(app,"asia-south1");
 const $=id=>document.getElementById(id);
 
 let stopApplications=null;
@@ -306,7 +307,8 @@ let stopFoodRiders=null;
 let stopFoodOrders=null;
 let stopMerchantWallets=null;
 let stopFoodRiderWallets=null;
-let stopFoodLedger=null;\nlet stopAdminAccounts=null;
+let stopFoodLedger=null;
+let stopAdminAccounts=null;
 
 let availableDrivers=[];
 let latestBookingDocs=[];
