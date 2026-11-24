@@ -422,7 +422,7 @@ function applyAdminRoleVisibility(){
  const system=currentIsSuperAdmin||currentAdminRoles.includes("system");
  ["onlineDrivers","applications","rideBookings"].forEach(id=>hideAdminCardById(id,ride));
  ["foodCustomers","foodMerchants"].forEach(id=>hideAdminCardById(id,food));
- ["foodRiders"].forEach(id=>hideAdminCardById(id,food||foodRider));
+ ["foodRiders"].forEach(id=>hideAdminCardById(id,foodRider));
  ["foodOrders"].forEach(id=>hideAdminCardById(id,food||foodRider));
  ["depositRequests"].forEach(id=>hideAdminCardById(id,finance));
  ["adminAccountManagement"].forEach(id=>hideAdminCardById(id,currentIsSuperAdmin));
