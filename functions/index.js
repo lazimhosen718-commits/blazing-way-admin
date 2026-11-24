@@ -449,3 +449,148 @@ exports.updateFoodOrderPreparationStatus = onCall(async (request) => {
 
   return { success: true, orderId, status: nextStatus };
 });
+
+
+/**
+ * Merchant creates or updates a food menu item.
+ * Menu writes are server-only; price and ownership are never trusted from clients.
+ */
+exports.saveFoodMenuItem = onCall(async (request) => {
+  const uid = requireUser(request);
+  const itemId = String(request.data?.itemId || "").trim();
+  const itemName = String(request.data?.itemName || "").trim();
+  const description = String(request.data?.description || "").trim();
+  const price = money(request.data?.price);
+  const available = request.data?.available !== false;
+
+  if (!itemName || itemName.length > 100 || description.length > 500 || price <= 0 || price > 100000) {
+    throw new HttpsError("invalid-argument", "খাবারের নাম, বিবরণ ও মূল্য সঠিকভাবে দিন।");
+  }
+  if (itemId && (itemId.includes("/") || itemId.length > 100)) {
+    throw new HttpsError("invalid-argument", "অবৈধ menu item ID।");
+  }
+
+  const profileRef = db.collection("merchantProfiles").doc(uid);
+  const menuRef = itemId ? db.collection("foodMenuItems").doc(itemId) : db.collection("foodMenuItems").doc();
+  await db.runTransaction(async (tx) => {
+    const profileSnap = await tx.get(profileRef);
+    if (!profileSnap.exists || profileSnap.data().role !== "merchant" || profileSnap.data().status !== "approved") {
+      throw new HttpsError("permission-denied", "অনুমোদিত Merchant অ্যাকাউন্ট প্রয়োজন।");
+    }
+    if (itemId) {
+      const existing = await tx.get(menuRef);
+      if (!existing.exists || existing.data().merchantId !== uid) {
+        throw new HttpsError("permission-denied", "এই Menu Item আপনার নয়।");
+      }
+    }
+    const profile = profileSnap.data();
+    tx.set(menuRef, {
+      merchantId: uid,
+      merchantName: profile.businessName,
+      itemName,
+      description,
+      price,
+      available,
+      updatedAt: FieldValue.serverTimestamp(),
+      ...(itemId ? {} : { createdAt: FieldValue.serverTimestamp() })
+    }, { merge: true });
+  });
+
+  return { success: true, itemId: menuRef.id };
+});
+
+/**
+ * Customer places an order from one merchant's currently available menu.
+ * Prices and merchant ownership are read from Firestore in the transaction.
+ * The order is pending; no service charge is marked as paid here.
+ */
+exports.placeFoodOrder = onCall(async (request) => {
+  const uid = requireUser(request);
+  const merchantId = String(request.data?.merchantId || "").trim();
+  const deliveryAddress = String(request.data?.deliveryAddress || "").trim();
+  const customerPhone = String(request.data?.customerPhone || "").trim();
+  const rawItems = request.data?.items;
+
+  if (!merchantId || merchantId.includes("/") || !deliveryAddress || deliveryAddress.length > 500
+      || !/^01[3-9][0-9]{8}$/.test(customerPhone) || !Array.isArray(rawItems)
+      || rawItems.length < 1 || rawItems.length > 20) {
+    throw new HttpsError("invalid-argument", "ডেলিভারি ঠিকানা, ফোন নম্বর ও খাবারের তালিকা সঠিকভাবে দিন।");
+  }
+
+  const normalized = [];
+  const seen = new Set();
+  for (const item of rawItems) {
+    const itemId = String(item?.itemId || "").trim();
+    const quantity = Number(item?.quantity);
+    if (!itemId || itemId.includes("/") || !Number.isInteger(quantity) || quantity < 1 || quantity > 20 || seen.has(itemId)) {
+      throw new HttpsError("invalid-argument", "কার্টে খাবারের তথ্য সঠিক নয়।");
+    }
+    seen.add(itemId);
+    normalized.push({ itemId, quantity });
+  }
+
+  const customerRef = db.collection("foodCustomerProfiles").doc(uid);
+  const merchantRef = db.collection("merchantProfiles").doc(merchantId);
+  const orderRef = db.collection("foodOrders").doc();
+  let orderTotal = 0;
+  let merchantName = "";
+  const lineItems = [];
+
+  await db.runTransaction(async (tx) => {
+    const [customerSnap, merchantSnap] = await Promise.all([tx.get(customerRef), tx.get(merchantRef)]);
+    if (!customerSnap.exists || customerSnap.data().role !== "food_customer") {
+      throw new HttpsError("permission-denied", "Food Customer অ্যাকাউন্ট প্রয়োজন।");
+    }
+    if (!merchantSnap.exists || merchantSnap.data().role !== "merchant" || merchantSnap.data().status !== "approved") {
+      throw new HttpsError("failed-precondition", "এই Merchant বর্তমানে অর্ডার নিতে পারবেন না।");
+    }
+
+    const itemRefs = normalized.map(x => db.collection("foodMenuItems").doc(x.itemId));
+    const itemSnaps = await Promise.all(itemRefs.map(ref => tx.get(ref)));
+    for (let i = 0; i < itemSnaps.length; i++) {
+      const snap = itemSnaps[i];
+      const requested = normalized[i];
+      if (!snap.exists) throw new HttpsError("not-found", "কার্টের একটি খাবার পাওয়া যায়নি।");
+      const data = snap.data();
+      if (data.merchantId !== merchantId || data.available !== true) {
+        throw new HttpsError("failed-precondition", "কার্টের একটি খাবার বর্তমানে পাওয়া যাচ্ছে না।");
+      }
+      const unitPrice = money(data.price);
+      const lineTotal = money(unitPrice * requested.quantity);
+      orderTotal = money(orderTotal + lineTotal);
+      lineItems.push({
+        itemId: requested.itemId,
+        itemName: String(data.itemName),
+        unitPrice,
+        quantity: requested.quantity,
+        lineTotal
+      });
+    }
+    merchantName = String(merchantSnap.data().businessName);
+
+    tx.create(orderRef, {
+      customerId: uid,
+      customerName: String(customerSnap.data().fullName || ""),
+      customerPhone,
+      merchantId,
+      merchantName,
+      items: lineItems,
+      subtotal: orderTotal,
+      serviceChargePaid: false,
+      serviceCharge: 0,
+      deliveryAddress,
+      status: "pending",
+      createdAt: FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp()
+    });
+    tx.create(db.collection("foodOrderEvents").doc(), {
+      orderId: orderRef.id,
+      actorUid: uid,
+      actorRole: "food_customer",
+      event: "order_placed",
+      createdAt: FieldValue.serverTimestamp()
+    });
+  });
+
+  return { success: true, orderId: orderRef.id, subtotal: orderTotal, status: "pending" };
+});
