@@ -528,6 +528,18 @@ service cloud.firestore {
     }
 
     // ---------------------------------------------------------
+    // SUPER ADMIN CONTROL: metadata is readable only by Super Admin.
+    // All writes happen through trusted Admin SDK callable functions.
+    match /adminAccounts/{adminId} {
+      allow read: if isAdmin();
+      allow create, update, delete: if false;
+    }
+
+    match /adminAuditLogs/{logId} {
+      allow read: if isAdmin();
+      allow create, update, delete: if false;
+    }
+
     // DEFAULT DENY — all unspecified collections and operations.
     // ---------------------------------------------------------
     match /{document=**} {
