@@ -306,15 +306,15 @@ exports.assignFoodRider = onCall(async (request) => {
     }
     const order = orderSnap.data();
     if (order.merchantId !== uid) throw new HttpsError("permission-denied", "এই অর্ডার আপনার Merchant অ্যাকাউন্টের নয়।");
-    if (!order.merchantAcceptedAt || !["accepted", "preparing", "ready", "rider_assigned"].includes(order.status)) {
-      throw new HttpsError("failed-precondition", "Merchant অর্ডার গ্রহণ করার পর Rider বরাদ্দ করা যাবে।");
+    if (!order.merchantAcceptedAt || order.status !== "ready") {
+      throw new HttpsError("failed-precondition", "অর্ডার ready হওয়ার পরই Rider বরাদ্দ করা যাবে।");
     }
     if (order.riderAcceptedAt) throw new HttpsError("failed-precondition", "Rider ইতিমধ্যে অর্ডার গ্রহণ করেছেন।");
 
     tx.update(orderRef, {
       assignedRiderId: riderId,
       riderAssignedAt: FieldValue.serverTimestamp(),
-      status: order.status === "ready" ? "rider_assigned" : order.status,
+      status: "rider_assigned",
       updatedAt: FieldValue.serverTimestamp()
     });
     tx.create(db.collection("foodOrderEvents").doc(), {
