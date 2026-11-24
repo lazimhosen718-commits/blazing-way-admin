@@ -499,6 +499,7 @@ service cloud.firestore {
       allow read: if isAdmin()
         || (signedIn() && resource.data.customerId == request.auth.uid)
         || (signedIn() && resource.data.merchantId == request.auth.uid && isApprovedMerchant(request.auth.uid))
+        || (signedIn() && resource.data.assignedRiderId == request.auth.uid && isApprovedFoodRider(request.auth.uid))
         || (signedIn() && resource.data.riderId == request.auth.uid && isApprovedFoodRider(request.auth.uid));
 
       allow create, update, delete: if false;
@@ -510,6 +511,12 @@ service cloud.firestore {
       allow read: if isAdmin()
         || (signedIn() && resource.data.ownerId == request.auth.uid);
 
+      allow create, update, delete: if false;
+    }
+
+    match /foodOrderEvents/{eventId} {
+      allow read: if isAdmin()
+        || (signedIn() && resource.data.actorUid == request.auth.uid);
       allow create, update, delete: if false;
     }
 
