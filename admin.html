@@ -386,7 +386,24 @@ function loadAdminAccounts(){
   snapshot.forEach(item=>{
    const d=item.data();const card=foodCard(d.displayName||d.email||item.id,[
     ["Email",d.email||"—"],["Role",d.role||"—"],["UID",item.id],["Status",d.status||"active"]
-   ]);area.appendChild(card);
+   ]);
+   if(d.status!=="disabled"){
+    const roleSelect=document.createElement("select");
+    ["ride","food","food_rider","finance","support","system"].forEach(role=>{
+     const option=document.createElement("option");option.value=role;option.textContent=role;option.selected=role===d.role;roleSelect.appendChild(option);
+    });
+    const change=document.createElement("button");change.textContent="Role পরিবর্তন";change.onclick=async()=>{
+     change.disabled=true;try{await httpsCallable(functions,"changeServiceAdminRole")({uid:item.id,role:roleSelect.value});alert("Admin Role পরিবর্তন হয়েছে।");}
+     catch(e){alert("Role পরিবর্তন হয়নি: "+e.message);}finally{change.disabled=false;}
+    };
+    const disable=document.createElement("button");disable.textContent="Admin ID বন্ধ করুন";disable.className="rejectBtn";disable.onclick=async()=>{
+     if(!confirm("এই Admin ID স্থায়ীভাবে নিষ্ক্রিয় করবেন?"))return;
+     disable.disabled=true;try{await httpsCallable(functions,"disableServiceAdmin")({uid:item.id});alert("Admin ID নিষ্ক্রিয় হয়েছে।");}
+     catch(e){alert("বন্ধ করা যায়নি: "+e.message);}finally{disable.disabled=false;}
+    };
+    card.append(roleSelect,change,disable);
+   }
+   area.appendChild(card);
   });
  },error=>{$("adminAccountList").textContent="Admin list load হয়নি: "+error.code;});
 }
