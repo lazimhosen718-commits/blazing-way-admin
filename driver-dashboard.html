@@ -1,0 +1,491 @@
+
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BLAZING-WAY Driver Dashboard</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;font-family:Arial,sans-serif;background:#eef2f7;color:#172554}
+header{background:#123b70;color:white;text-align:center;padding:18px}
+main{max-width:850px;margin:20px auto;padding:12px}
+.card{background:white;padding:18px;margin:14px 0;border-radius:12px;box-shadow:0 3px 12px #ddd}
+input,button{padding:12px;border-radius:7px;font-size:15px}
+input{width:100%;border:1px solid #ccc;margin:8px 0}
+button{background:#123b70;color:white;border:0;margin:5px;cursor:pointer}
+button:disabled{opacity:.5}
+.green{background:#087443}
+.red{background:#b42318}
+.online{color:green;font-weight:bold}
+.offline{color:#b42318;font-weight:bold}
+.pending{color:#a15c00;font-weight:bold}
+.completed{color:green;font-weight:bold}
+.ride,.payment{border:1px solid #cbd5e1;padding:14px;margin:12px 0;border-radius:9px;overflow-wrap:anywhere}
+.summary{background:#f1f5f9;padding:12px;border-radius:8px;margin:8px 0}
+.message{white-space:pre-wrap;color:#b42318}
+</style>
+</head>
+<body>
+
+<header>
+<h1>BLAZING-WAY</h1>
+<p>Driver Dashboard</p>
+</header>
+
+<main>
+
+<div class="card" id="loginCard">
+<h2>চালক Login</h2>
+<form id="loginForm">
+<label>Gmail</label>
+<input id="email" type="email" required>
+<label>Password</label>
+<input id="password" type="password" required>
+<button id="loginBtn" type="submit">Login</button>
+</form>
+<p id="loginMessage" class="message"></p>
+<p><a href="driver-register.html">নতুন চালক নিবন্ধন</a></p>
+</div>
+
+<div id="dashboard" hidden>
+
+<div class="card">
+<h2>স্বাগতম, <span id="driverName">চালক</span>!</h2>
+<p>Gmail: <span id="driverEmail"></span></p>
+<p>মোবাইল: <span id="driverPhone"></span></p>
+<p>গাড়ি: <span id="vehicle"></span></p>
+<p id="onlineStatus"></p>
+<button id="onlineBtn" class="green">Online হোন</button>
+<button id="logoutBtn" class="red">Logout</button>
+<p id="statusMessage" class="message"></p>
+</div>
+
+<div class="card">
+<h2>💰 আমার আয় ও Payment</h2>
+<div class="summary">
+<p>Completed Ride: <strong id="completedCount">0</strong></p>
+<p>মোট ভাড়া: <strong id="totalFare">৳0.00</strong></p>
+<p>চালকের আয় (৯৯%): <strong id="earnings">৳0.00</strong></p>
+<p>পরিশোধিত: <strong id="paid">৳0.00</strong></p>
+<p>বকেয়া: <strong id="due">৳0.00</strong></p>
+</div>
+<p>Admin-এর কমিশন: প্রতি Completed Ride-এর ১%।</p>
+</div>
+
+<div class="card">
+<h2>🚕 আমার Assigned Rides</h2>
+<p>Admin আপনাকে যে Ride Assign করেছেন, এখানে দেখতে পাবেন।</p>
+<div id="rides">Ride লোড হচ্ছে...</div>
+</div>
+
+<div class="card">
+<h2>📜 Payment History</h2>
+<div id="payments">Payment History লোড হচ্ছে...</div>
+</div>
+
+</div>
+</main>
+
+<script type="module">
+import {initializeApp} from "https://www.gstatic.com/firebasejs/12.0.0/firebase-app.js";
+
+import {
+ getAuth,
+ signInWithEmailAndPassword,
+ onAuthStateChanged,
+ signOut
+} from "https://www.gstatic.com/firebasejs/12.0.0/firebase-auth.js";
+
+import {
+ getFirestore,
+ doc,
+ getDoc,
+ setDoc,
+ updateDoc,
+ collection,
+ query,
+ where,
+ onSnapshot,
+ serverTimestamp
+} from "https://www.gstatic.com/firebasejs/12.0.0/firebase-firestore.js";
+
+const app=initializeApp({
+ apiKey:"AIzaSyBVzdXw-nO8ixDqxbGhTj3lbBX37XUMCr4",
+ authDomain:"blazing-way.firebaseapp.com",
+ projectId:"blazing-way",
+ storageBucket:"blazing-way.firebasestorage.app",
+ messagingSenderId:"100523779075",
+ appId:"1:100523779075:web:732df54a1b0565f02e1a36",
+ measurementId:"G-9V8GMD28ST"
+});
+
+const auth=getAuth(app);
+const db=getFirestore(app);
+const $=id=>document.getElementById(id);
+
+let currentDriver=null;
+let driverInfo=null;
+let currentOnline=false;
+let stopRides=null;
+let stopPayments=null;
+let rideDocs=[];
+let paymentDocs=[];
+let busy=false;
+
+const money=n=>"৳"+Number(n||0).toFixed(2);
+
+function showError(id,message){
+ $(id).textContent=message;
+}
+
+function stopListeners(){
+ if(stopRides)stopRides();
+ if(stopPayments)stopPayments();
+ stopRides=null;
+ stopPayments=null;
+}
+
+async function checkDriver(user){
+ stopListeners();
+
+ currentDriver=user;
+ $("loginCard").hidden=true;
+ $("dashboard").hidden=false;
+ showError("statusMessage","চালকের তথ্য যাচাই হচ্ছে...");
+
+ try{
+  const ref=doc(db,"driverApplications",user.uid);
+  const snap=await getDoc(ref);
+
+  if(!snap.exists())throw new Error("এই Gmail-এ চালকের আবেদন পাওয়া যায়নি।");
+
+  const data=snap.data();
+
+  if(data.status!=="approved"){
+   throw new Error("আপনার Driver আবেদন এখনো অনুমোদিত নয়।");
+  }
+
+  driverInfo=data;
+
+  $("driverName").textContent=data.fullName||"চালক";
+  $("driverEmail").textContent=user.email||"";
+  $("driverPhone").textContent=data.phone||"";
+  $("vehicle").textContent=data.vehicleType==="bike"?"Bike":"Private Car";
+
+  const presenceRef=doc(db,"driverPresence",user.uid);
+  const presenceSnap=await getDoc(presenceRef);
+
+  currentOnline=presenceSnap.exists()&&presenceSnap.data().online===true;
+  updateOnlineDisplay();
+
+  loadRides();
+  loadPayments();
+
+  showError("statusMessage","আপনার Driver Dashboard প্রস্তুত।");
+
+ }catch(error){
+  console.error(error);
+  showError("statusMessage",error.message||"চালকের তথ্য পাওয়া যায়নি।");
+ }
+}
+
+function updateOnlineDisplay(){
+ if(currentOnline){
+  $("onlineStatus").textContent="🟢 আপনি এখন ONLINE আছেন।";
+  $("onlineStatus").className="online";
+  $("onlineBtn").textContent="Offline হোন";
+  $("onlineBtn").className="red";
+ }else{
+  $("onlineStatus").textContent="🔴 আপনি এখন OFFLINE আছেন।";
+  $("onlineStatus").className="offline";
+  $("onlineBtn").textContent="Online হোন";
+  $("onlineBtn").className="green";
+ }
+}
+
+$("onlineBtn").onclick=async()=>{
+ if(!currentDriver||busy)return;
+
+ busy=true;
+ $("onlineBtn").disabled=true;
+
+ try{
+  const ref=doc(db,"driverPresence",currentDriver.uid);
+  const snap=await getDoc(ref);
+  const newStatus=!currentOnline;
+
+  if(snap.exists()){
+   await updateDoc(ref,{
+    online:newStatus,
+    updatedAt:serverTimestamp()
+   });
+  }else{
+   await setDoc(ref,{
+    uid:currentDriver.uid,
+    online:newStatus,
+    updatedAt:serverTimestamp()
+   });
+  }
+
+  currentOnline=newStatus;
+  updateOnlineDisplay();
+  showError("statusMessage","Online Status পরিবর্তন হয়েছে।");
+
+ }catch(error){
+  console.error(error);
+  showError("statusMessage","Status পরিবর্তন হয়নি: "+error.code);
+ }finally{
+  busy=false;
+  $("onlineBtn").disabled=false;
+ }
+};
+
+// ASSIGNED RIDES
+function loadRides(){
+ $("rides").textContent="Ride লোড হচ্ছে...";
+
+ const q=query(
+  collection(db,"rideBookings"),
+  where("driverId","==",currentDriver.uid)
+ );
+
+ stopRides=onSnapshot(q,snapshot=>{
+  rideDocs=snapshot.docs;
+  renderRides();
+  renderEarnings();
+ },error=>{
+  console.error(error);
+  $("rides").textContent="Ride লোড হয়নি: "+error.code;
+ });
+}
+
+function renderRides(){
+ const area=$("rides");
+ area.replaceChildren();
+
+ if(!rideDocs.length){
+  area.textContent="এখনো কোনো Ride Assign করা হয়নি।";
+  return;
+ }
+
+ const sorted=[...rideDocs].sort((a,b)=>
+  (b.data().assignedAt?.toMillis?.()||0)-
+  (a.data().assignedAt?.toMillis?.()||0)
+ );
+
+ sorted.forEach(item=>{
+  const d=item.data();
+  const card=document.createElement("div");
+  card.className="ride";
+
+  function line(label,value){
+   const p=document.createElement("p");
+   p.textContent=label+": "+value;
+   return p;
+  }
+
+  const status=line("Booking Status",d.status||"unknown");
+  status.className=d.status==="completed"?"completed":"pending";
+
+  card.append(
+   line("Booking ID",item.id),
+   line("Pickup",d.pickup||"নেই"),
+   line("Destination",d.destination||"নেই"),
+   line("যানবাহন",d.vehicleType==="bike"?"Bike":"Private Car"),
+   line("দূরত্ব",(d.distanceKm||0)+" কিমি"),
+   line("ভাড়া",money(d.estimatedFare)),
+   status,
+   line("আপনার Response",d.driverResponse||"এখনো Response দেওয়া হয়নি")
+  );
+
+  if(d.status==="accepted"&&!d.driverResponse){
+   const accept=document.createElement("button");
+   accept.textContent="Ride গ্রহণ করুন";
+   accept.className="green";
+
+   const reject=document.createElement("button");
+   reject.textContent="Ride প্রত্যাখ্যান করুন";
+   reject.className="red";
+
+   accept.onclick=()=>respondToRide(item.id,"accepted",accept,reject);
+   reject.onclick=()=>respondToRide(item.id,"rejected",accept,reject);
+
+   card.append(accept,reject);
+  }
+
+  if(d.status==="completed"){
+   const note=document.createElement("p");
+   note.className="completed";
+   note.textContent="এই যাত্রা সম্পন্ন হয়েছে।";
+   card.appendChild(note);
+  }else{
+   const note=document.createElement("p");
+   note.textContent="Ride Completed করার জন্য Admin-এর সঙ্গে যোগাযোগ করুন।";
+   card.appendChild(note);
+  }
+
+  area.appendChild(card);
+ });
+}
+
+// DRIVER RESPONSE
+async function respondToRide(id,response,accept,reject){
+ if(!currentDriver)return;
+
+ if(!confirm(response==="accepted"?
+  "এই Ride গ্রহণ করতে চান?":
+  "এই Ride প্রত্যাখ্যান করতে চান?"))return;
+
+ accept.disabled=true;
+ reject.disabled=true;
+
+ try{
+  await updateDoc(doc(db,"rideBookings",id),{
+   driverResponse:response,
+   driverRespondedAt:serverTimestamp()
+  });
+
+  alert(response==="accepted"?
+   "আপনি Ride গ্রহণ করেছেন।":
+   "আপনি Ride প্রত্যাখ্যান করেছেন।");
+
+ }catch(error){
+  console.error(error);
+  alert("Response দেওয়া যায়নি: "+error.code);
+  accept.disabled=false;
+  reject.disabled=false;
+ }
+}
+
+// PAYMENT HISTORY
+function loadPayments(){
+ $("payments").textContent="Payment History লোড হচ্ছে...";
+
+ const q=query(
+  collection(db,"driverPayments"),
+  where("driverId","==",currentDriver.uid)
+ );
+
+ stopPayments=onSnapshot(q,snapshot=>{
+  paymentDocs=snapshot.docs;
+  renderPayments();
+  renderEarnings();
+ },error=>{
+  console.error(error);
+  $("payments").textContent="Payment History লোড হয়নি: "+error.code;
+ });
+}
+
+function renderPayments(){
+ const area=$("payments");
+ area.replaceChildren();
+
+ if(!paymentDocs.length){
+  area.textContent="এখনো কোনো Payment পাওয়া যায়নি।";
+  return;
+ }
+
+ const sorted=[...paymentDocs].sort((a,b)=>
+  (b.data().paidAt?.toMillis?.()||0)-
+  (a.data().paidAt?.toMillis?.()||0)
+ );
+
+ sorted.forEach(item=>{
+  const d=item.data();
+  const card=document.createElement("div");
+  card.className="payment";
+
+  function line(label,value){
+   const p=document.createElement("p");
+   p.textContent=label+": "+value;
+   return p;
+  }
+
+  card.append(
+   line("Payment ID",item.id),
+   line("পরিশোধিত টাকা",money(d.amount)),
+   line("Payment Method",d.method||"নেই"),
+   line("Transaction Reference",d.reference||"N/A"),
+   line("তারিখ",d.paidAt?.toDate?
+    d.paidAt.toDate().toLocaleString("bn-BD"):"তারিখ পাওয়া যায়নি")
+  );
+
+  area.appendChild(card);
+ });
+}
+
+// EARNINGS
+function renderEarnings(){
+ let totalFare=0;
+ let completedCount=0;
+ let paid=0;
+
+ rideDocs.forEach(item=>{
+  const d=item.data();
+  if(d.status==="completed"){
+   totalFare+=Number(d.estimatedFare||0);
+   completedCount++;
+  }
+ });
+
+ paymentDocs.forEach(item=>{
+  paid+=Number(item.data().amount||0);
+ });
+
+ const earnings=totalFare*0.99;
+ const due=earnings-paid;
+
+ $("completedCount").textContent=completedCount;
+ $("totalFare").textContent=money(totalFare);
+ $("earnings").textContent=money(earnings);
+ $("paid").textContent=money(paid);
+ $("due").textContent=money(due);
+}
+
+// LOGIN
+$("loginForm").addEventListener("submit",async event=>{
+ event.preventDefault();
+
+ $("loginBtn").disabled=true;
+ showError("loginMessage","Login হচ্ছে...");
+
+ try{
+  const email=$("email").value.trim();
+  const password=$("password").value;
+
+  const result=await signInWithEmailAndPassword(auth,email,password);
+  await checkDriver(result.user);
+
+ }catch(error){
+  console.error(error);
+  showError("loginMessage","Login হয়নি। Gmail ও Password পরীক্ষা করুন।");
+ }finally{
+  $("loginBtn").disabled=false;
+ }
+});
+
+// AUTH
+onAuthStateChanged(auth,async user=>{
+ if(user){
+  await checkDriver(user);
+ }else{
+  stopListeners();
+  currentDriver=null;
+  driverInfo=null;
+  rideDocs=[];
+  paymentDocs=[];
+  $("loginCard").hidden=false;
+  $("dashboard").hidden=true;
+ }
+});
+
+// LOGOUT
+$("logoutBtn").onclick=async()=>{
+ stopListeners();
+ await signOut(auth);
+};
+
+</script>
+</body>
+</html>
