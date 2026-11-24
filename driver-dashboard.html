@@ -25,6 +25,13 @@ button:disabled{opacity:.5}
 .summary{background:#f1f5f9;padding:12px;border-radius:8px;margin:8px 0}
 .message{white-space:pre-wrap;color:#b42318}
 </style>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin=""/>
+<style>
+.live-map{height:280px;width:100%;border-radius:10px;border:1px solid #cbd5e1;margin-top:10px}
+.track-panel{background:#eff6ff;border:1px solid #bfdbfe;padding:12px;border-radius:10px;margin-top:12px}
+.track-btn{background:#087443;color:white;border:0;padding:11px;border-radius:7px;width:100%;margin-top:8px}
+.track-note{font-size:13px;color:#475569;line-height:1.5}
+</style>
 </head>
 <body>
 
@@ -89,6 +96,7 @@ button:disabled{opacity:.5}
 
 <script type="module">
 import {initializeApp} from "https://www.gstatic.com/firebasejs/12.0.0/firebase-app.js";
+import L from "https://cdn.jsdelivr.net/npm/leaflet@1.9.4/+esm";
 
 import {
  getAuth,
@@ -107,7 +115,10 @@ import {
  query,
  where,
  onSnapshot,
- serverTimestamp
+ serverTimestamp,
+ setDoc,
+ getDoc as firestoreGetDoc,
+ onSnapshot as firestoreOnSnapshot
 } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-firestore.js";
 
 const app=initializeApp({
@@ -241,6 +252,59 @@ $("onlineBtn").onclick=async()=>{
  }
 };
 
+
+const driverGpsWatches=new Map();
+function startDriverLiveGps(bookingId,uid,note){
+ if(!navigator.geolocation){note.textContent="এই ডিভাইসে GPS পাওয়া যাচ্ছে না।";return;}
+ if(driverGpsWatches.has(bookingId)){note.textContent="আপনার Live GPS ইতিমধ্যে চালু আছে।";return;}
+ note.textContent="GPS অনুমতি দিন; Live Location চালু হচ্ছে...";
+ let lastWrite=0;
+ const watch=navigator.geolocation.watchPosition(async pos=>{
+  const now=Date.now();if(now-lastWrite<8000)return;lastWrite=now;
+  try{
+   await setDoc(doc(db,"rideLocations",bookingId,"participants",uid),{
+    uid,role:"driver",lat:pos.coords.latitude,lng:pos.coords.longitude,
+    accuracy:Math.round(pos.coords.accuracy||0),updatedAt:serverTimestamp()
+   },{merge:true});
+   note.textContent="আপনার Live Location যাত্রীর সঙ্গে শেয়ার হচ্ছে।";
+  }catch(e){console.error(e);note.textContent="Location আপডেট হয়নি: "+e.code;}
+ },err=>{note.textContent="GPS অনুমতি/সেবা পাওয়া যায়নি: "+err.message;},
+ {enableHighAccuracy:true,maximumAge:5000,timeout:15000});
+ driverGpsWatches.set(bookingId,watch);
+}
+function addDriverLivePanel(bookingId,d,card){
+ if(!d.passengerId || !["accepted","in_progress"].includes(d.status))return;
+ const panel=document.createElement("div");panel.className="track-panel";
+ const heading=document.createElement("h3");heading.textContent="📍 Passenger Live Location";panel.appendChild(heading);
+ const note=document.createElement("p");note.className="track-note";note.textContent="যাত্রীর Pickup Location দেখতে এবং নিজের অবস্থান শেয়ার করতে GPS চালু করুন।";panel.appendChild(note);
+ const btn=document.createElement("button");btn.className="green";btn.textContent="আমার Live GPS চালু করুন";
+ btn.onclick=()=>startDriverLiveGps(bookingId,currentDriver.uid,note);panel.appendChild(btn);
+ const mapBox=document.createElement("div");mapBox.className="live-map";panel.appendChild(mapBox);
+ const info=document.createElement("p");info.className="track-note";info.textContent="যাত্রীর Location-এর অপেক্ষায়...";panel.appendChild(info);
+ card.appendChild(panel);
+ const map=L.map(mapBox).setView([23.7806,90.4070],13);
+ L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{maxZoom:19,attribution:"© OpenStreetMap"}).addTo(map);
+ let passengerMarker=null,driverMarker=null;
+ const passengerRef=doc(db,"rideLocations",bookingId,"participants",d.passengerId);
+ const driverRef=doc(db,"rideLocations",bookingId,"participants",currentDriver.uid);
+ firestoreOnSnapshot(passengerRef,s=>{
+  if(!s.exists())return;const v=s.data();if(typeof v.lat!=="number"||typeof v.lng!=="number")return;
+  const ll=[v.lat,v.lng];if(passengerMarker)passengerMarker.setLatLng(ll);else passengerMarker=L.marker(ll).addTo(map).bindPopup("যাত্রীর অবস্থান");
+  if(driverMarker){
+   const a=driverMarker.getLatLng(),R=6371,rad=x=>x*Math.PI/180;
+   const dlat=rad(v.lat-a.lat),dlon=rad(v.lng-a.lng);
+   const h=Math.sin(dlat/2)**2+Math.cos(rad(a.lat))*Math.cos(rad(v.lat))*Math.sin(dlon/2)**2;
+   info.textContent="যাত্রী আনুমানিক "+(R*2*Math.atan2(Math.sqrt(h),Math.sqrt(1-h))).toFixed(2)+" কিমি দূরে।";
+  }
+  map.setView(ll,15);
+ },e=>{info.textContent="যাত্রীর Location দেখা যাচ্ছে না: "+e.code;});
+ firestoreOnSnapshot(driverRef,s=>{
+  if(!s.exists())return;const v=s.data();if(typeof v.lat!=="number"||typeof v.lng!=="number")return;
+  const ll=[v.lat,v.lng];if(driverMarker)driverMarker.setLatLng(ll);else driverMarker=L.marker(ll).addTo(map).bindPopup("আপনার অবস্থান");
+ },()=>{});
+ map.whenReady(()=>setTimeout(()=>map.invalidateSize(),250));
+}
+
 // ASSIGNED RIDES
 function loadRides(){
  $("rides").textContent="Ride লোড হচ্ছে...";
@@ -325,6 +389,7 @@ function renderRides(){
    card.appendChild(note);
   }
 
+  addDriverLivePanel(item.id,d,card);
   area.appendChild(card);
  });
 }
