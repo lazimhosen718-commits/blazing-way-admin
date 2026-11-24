@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BLAZING-WAY Passenger Wallet</title>
+<style>
+*{box-sizing:border-box}body{margin:0;font-family:Arial,sans-serif;background:#eef2f7;color:#172554}
+header{background:#123b70;color:#fff;text-align:center;padding:20px}main{max-width:720px;margin:20px auto;padding:15px}
+.card{background:#fff;padding:20px;margin-bottom:16px;border-radius:12px;box-shadow:0 3px 12px #ddd}
+input,select{width:100%;padding:13px;margin:8px 0;border:1px solid #cbd5e1;border-radius:7px;font-size:16px}
+button,.link{display:block;width:100%;padding:13px;margin-top:10px;border:0;border-radius:7px;background:#123b70;color:white;text-align:center;text-decoration:none;font-size:16px}
+button:disabled{opacity:.6}.balance{font-size:30px;font-weight:bold;color:#087443}.small{font-size:13px;color:#64748b;line-height:1.6}
+.notice{padding:12px;border-radius:8px;background:#fff7ed;border:1px solid #fed7aa;color:#9a3412;line-height:1.6;font-size:13px}
+.item{padding:12px;margin:10px 0;border:1px solid #dbe3ef;border-radius:8px;overflow-wrap:anywhere}.pending{color:#a15c00;font-weight:bold}.success{color:#087443;font-weight:bold}.danger{color:#b42318}
+</style>
+</head>
+<body>
+<header><h1>BLAZING-WAY</h1><p>Passenger Wallet</p></header>
+<main>
+ <div class="card">
+  <h2>আমার Wallet</h2>
+  <p id="userInfo">তথ্য লোড হচ্ছে...</p>
+  <p class="small">বর্তমান ব্যালেন্স</p>
+  <div class="balance" id="balance">৳০.০০</div>
+  <p class="small" id="walletStatus">Wallet-এর তথ্য লোড হচ্ছে...</p>
+  <a class="link" href="passenger-dashboard.html">Passenger Dashboard-এ ফিরে যান</a>
+ </div>
+ <div class="card">
+  <h2>➕ Wallet-এ টাকা যোগ করার অনুরোধ</h2>
+  <p class="small">নিচের নম্বরে/অ্যাকাউন্টে টাকা পাঠানোর পর Transaction ID দিয়ে অনুরোধ জমা দিন। Admin যাচাই করে অনুমোদন করলে Wallet-এ টাকা যোগ হবে।</p>
+  <div class="notice">এটি এখনো স্বয়ংক্রিয় Payment Gateway নয়। টাকা পাঠানোর আগে BLAZING-WAY-এর অনুমোদিত পেমেন্ট নম্বর Admin-এর কাছ থেকে নিশ্চিত করুন। ভুল বা ভুয়া Transaction ID দেবেন না।</div>
+  <label>টাকার পরিমাণ (৳)</label><input id="amount" type="number" min="10" max="50000" step="1" placeholder="যেমন: 500">
+  <label>পেমেন্ট পদ্ধতি</label>
+  <select id="method"><option value="bKash">bKash</option><option value="Nagad">Nagad</option><option value="Rocket">Rocket</option><option value="Bank">Bank</option></select>
+  <label>Transaction ID / Reference</label><input id="trx" type="text" maxlength="100" placeholder="টাকা পাঠানোর Transaction ID">
+  <button id="submitBtn" disabled>টাকা যোগের অনুরোধ জমা দিন</button>
+  <p id="message" class="small"></p>
+ </div>
+ <div class="card">
+  <h2>📜 আমার Deposit Request</h2>
+  <div id="requests">তথ্য লোড হচ্ছে...</div>
+ </div>
+ <div class="card">
+  <h2>📚 Wallet Transaction History</h2>
+  <div id="history">তথ্য লোড হচ্ছে...</div>
+ </div>
+</main>
+<script type="module">
+import {initializeApp} from "https://www.gstatic.com/firebasejs/12.0.0/firebase-app.js";
+import {getAuth,onAuthStateChanged,signOut} from "https://www.gstatic.com/firebasejs/12.0.0/firebase-auth.js";
+import {getFirestore,doc,getDoc,collection,addDoc,query,where,onSnapshot,serverTimestamp,orderBy,limit} from "https://www.gstatic.com/firebasejs/12.0.0/firebase-firestore.js";
+const app=initializeApp({apiKey:"AIzaSyBVzdXw-nO8ixDqxbGhTj3lbBX37XUMCr4",authDomain:"blazing-way.firebaseapp.com",projectId:"blazing-way",storageBucket:"blazing-way.firebasestorage.app",messagingSenderId:"100523779075",appId:"1:100523779075:web:732df54a1b0565f02e1a36",measurementId:"G-9V8GMD28ST"});
+const auth=getAuth(app),db=getFirestore(app),$=id=>document.getElementById(id);
+let currentUid=null,stopRequests=null,stopHistory=null,stopWallet=null;
+function money(n){return "৳"+Number(n||0).toFixed(2)}
+function showList(target,docs,empty){
+ $(target).replaceChildren();
+ if(!docs.length){$(target).textContent=empty;return}
+ docs.forEach(d=>{
+  const x=d.data(),el=document.createElement("div");el.className="item";
+  const title=document.createElement("strong");title.textContent=money(x.amount||0)+" — "+(x.method||"");
+  const status=document.createElement("p");status.className=x.status==="approved"?"success":x.status==="pending"?"pending":"danger";status.textContent="অবস্থা: "+(x.status||"অজানা");
+  const ref=document.createElement("p");ref.textContent="Reference: "+(x.transactionId||x.reference||"—");
+  const date=document.createElement("p");date.className="small";date.textContent="সময়: "+(x.createdAt?.toDate?x.createdAt.toDate().toLocaleString("bn-BD"):"—");
+  el.append(title,status,ref,date);$(target).appendChild(el);
+ });
+}
+function stopAll(){[stopRequests,stopHistory,stopWallet].forEach(fn=>{if(fn)fn()});stopRequests=stopHistory=stopWallet=null}
+onAuthStateChanged(auth,async user=>{
+ stopAll();$("submitBtn").disabled=true;
+ if(!user){location.replace("passenger-login.html");return}
+ currentUid=user.uid;
+ try{
+  const profile=await getDoc(doc(db,"passengerProfiles",user.uid));
+  if(!profile.exists()||profile.data().role!=="passenger"){await signOut(auth);location.replace("passenger-login.html");return}
+  $("userInfo").textContent="নাম: "+(profile.data().fullName||"")+" | "+user.email;
+  $("submitBtn").disabled=false;
+  stopWallet=onSnapshot(doc(db,"passengerWallets",user.uid),snap=>{
+   const amount=snap.exists()?Number(snap.data().balance||0):0;
+   $("balance").textContent=money(amount);
+   $("walletStatus").textContent=snap.exists()?"Wallet balance আপডেট হয়েছে।":"এখনো Wallet balance তৈরি হয়নি। Deposit অনুমোদনের পর Admin balance তৈরি করবেন।";
+  },err=>{$("walletStatus").textContent="Wallet পড়া যায়নি: "+err.code});
+  stopRequests=onSnapshot(query(collection(db,"depositRequests"),where("passengerId","==",user.uid)),snap=>{
+   const docs=[...snap.docs].sort((a,b)=>(b.data().createdAt?.toMillis?.()||0)-(a.data().createdAt?.toMillis?.()||0));
+   showList("requests",docs,"এখনো কোনো Deposit Request নেই।");
+  },err=>{$("requests").textContent="Deposit Request লোড হয়নি: "+err.code});
+  stopHistory=onSnapshot(query(collection(db,"walletTransactions"),where("userId","==",user.uid)),snap=>{
+   const docs=[...snap.docs].sort((a,b)=>(b.data().createdAt?.toMillis?.()||0)-(a.data().createdAt?.toMillis?.()||0));
+   showList("history",docs,"এখনো কোনো Wallet Transaction নেই।");
+  },err=>{$("history").textContent="Transaction History লোড হয়নি: "+err.code});
+ }catch(err){$("userInfo").textContent="প্রোফাইল লোড হয়নি: "+err.code}
+});
+$("submitBtn").addEventListener("click",async()=>{
+ const amount=Number($("amount").value),method=$("method").value,trx=$("trx").value.trim();
+ if(!currentUid){$("message").textContent="আবার Login করুন।";return}
+ if(!Number.isInteger(amount)||amount<10||amount>50000){$("message").textContent="১০ থেকে ৫০,০০০ টাকার মধ্যে পূর্ণ সংখ্যা দিন।";return}
+ if(trx.length<5){$("message").textContent="সঠিক Transaction ID / Reference দিন।";return}
+ $("submitBtn").disabled=true;$("message").textContent="অনুরোধ জমা হচ্ছে...";
+ try{
+  await addDoc(collection(db,"depositRequests"),{passengerId:currentUid,amount,method,transactionId:trx,status:"pending",createdAt:serverTimestamp()});
+  $("amount").value="";$("trx").value="";$("message").textContent="অনুরোধ জমা হয়েছে। Admin যাচাই না করা পর্যন্ত Wallet balance পরিবর্তন হবে না।";
+ }catch(err){$("message").textContent="অনুরোধ জমা হয়নি: "+err.code}
+ finally{$("submitBtn").disabled=false}
+});
+</script>
+</body>
+</html>
