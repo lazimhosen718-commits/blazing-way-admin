@@ -492,6 +492,13 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    // Published menu items are readable by signed-in app users.
+    // Only the trusted saveFoodMenuItem callable may write menu data.
+    match /foodMenuItems/{itemId} {
+      allow read: if signedIn();
+      allow create, update, delete: if false;
+    }
+
     // Food order reads are limited to the customer, owning merchant,
     // assigned approved rider, and Admin. Writes are intentionally closed
     // until the production order schema and server-side fee transaction exist.
