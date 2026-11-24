@@ -404,3 +404,48 @@ exports.acceptFoodDeliveryAssignment = onCall(async (request) => {
 
   return result;
 });
+
+
+/**
+ * FOOD DELIVERY: Merchant advances an accepted order through preparation.
+ * Client-side direct order writes remain denied by Firestore Rules.
+ */
+exports.updateFoodOrderPreparationStatus = onCall(async (request) => {
+  const uid = requireUser(request);
+  const orderId = String(request.data?.orderId || "").trim();
+  const nextStatus = String(request.data?.status || "").trim();
+  if (!orderId || orderId.includes("/") || !["preparing", "ready"].includes(nextStatus)) {
+    throw new HttpsError("invalid-argument", "সঠিক orderId এবং preparing/ready status দিন।");
+  }
+
+  const orderRef = db.collection("foodOrders").doc(orderId);
+  const merchantRef = db.collection("merchantProfiles").doc(uid);
+
+  await db.runTransaction(async (tx) => {
+    const [orderSnap, merchantSnap] = await Promise.all([tx.get(orderRef), tx.get(merchantRef)]);
+    if (!orderSnap.exists) throw new HttpsError("not-found", "অর্ডার পাওয়া যায়নি।");
+    if (!merchantSnap.exists || merchantSnap.data().role !== "merchant" || merchantSnap.data().status !== "approved") {
+      throw new HttpsError("permission-denied", "অনুমোদিত Merchant অ্যাকাউন্ট প্রয়োজন।");
+    }
+    const order = orderSnap.data();
+    if (order.merchantId !== uid) throw new HttpsError("permission-denied", "এই অর্ডার আপনার Merchant অ্যাকাউন্টের নয়।");
+    const allowed = (order.status === "accepted" && nextStatus === "preparing")
+      || (order.status === "preparing" && nextStatus === "ready");
+    if (!allowed) throw new HttpsError("failed-precondition", "অর্ডারের বর্তমান অবস্থায় এই পরিবর্তন করা যাবে না।");
+
+    tx.update(orderRef, {
+      status: nextStatus,
+      updatedAt: FieldValue.serverTimestamp(),
+      ...(nextStatus === "ready" ? { readyAt: FieldValue.serverTimestamp() } : {})
+    });
+    tx.create(db.collection("foodOrderEvents").doc(), {
+      orderId,
+      actorUid: uid,
+      actorRole: "merchant",
+      event: nextStatus,
+      createdAt: FieldValue.serverTimestamp()
+    });
+  });
+
+  return { success: true, orderId, status: nextStatus };
+});
