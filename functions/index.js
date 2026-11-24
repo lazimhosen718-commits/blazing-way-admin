@@ -198,3 +198,209 @@ exports.requestWalletWithdrawal = onCall(async (request) => {
 
   return { success: true, withdrawalRequestId: requestRef.id, amount, fee: 5, totalDebited: totalDebit, status: "pending" };
 });
+
+
+/**
+ * FOOD DELIVERY: Merchant accepts a pending order.
+ * A fixed BDT 1 fee is deducted once, atomically with the order update.
+ */
+exports.acceptFoodOrder = onCall(async (request) => {
+  const uid = requireUser(request);
+  const orderId = String(request.data?.orderId || "").trim();
+  if (!orderId || orderId.includes("/")) {
+    throw new HttpsError("invalid-argument", "সঠিক orderId দিন।");
+  }
+
+  const orderRef = db.collection("foodOrders").doc(orderId);
+  const profileRef = db.collection("merchantProfiles").doc(uid);
+  const walletRef = db.collection("merchantWallets").doc(uid);
+  const feeId = crypto.createHash("sha256").update("merchant_accept:" + orderId).digest("hex");
+  const feeRef = db.collection("foodWalletTransactions").doc(feeId);
+  let result;
+
+  await db.runTransaction(async (tx) => {
+    const [orderSnap, profileSnap, walletSnap, feeSnap] = await Promise.all([
+      tx.get(orderRef), tx.get(profileRef), tx.get(walletRef), tx.get(feeRef)
+    ]);
+    if (!orderSnap.exists) throw new HttpsError("not-found", "অর্ডার পাওয়া যায়নি।");
+    if (!profileSnap.exists || profileSnap.data().role !== "merchant" || profileSnap.data().status !== "approved") {
+      throw new HttpsError("permission-denied", "অনুমোদিত Merchant অ্যাকাউন্ট প্রয়োজন।");
+    }
+    const order = orderSnap.data();
+    if (order.merchantId !== uid) throw new HttpsError("permission-denied", "এই অর্ডার আপনার Merchant অ্যাকাউন্টের নয়।");
+
+    if (order.merchantAcceptedAt || feeSnap.exists) {
+      result = { success: true, alreadyAccepted: true, fee: 1 };
+      return;
+    }
+    if (order.status !== "pending") {
+      throw new HttpsError("failed-precondition", "শুধু pending অর্ডার গ্রহণ করা যাবে।");
+    }
+    if (!walletSnap.exists) throw new HttpsError("failed-precondition", "Merchant Wallet পাওয়া যায়নি।");
+    const balance = Number(walletSnap.data().balance);
+    if (!Number.isFinite(balance) || balance < 1) {
+      throw new HttpsError("failed-precondition", "অর্ডার গ্রহণের জন্য Wallet-এ কমপক্ষে ৳১ থাকতে হবে।");
+    }
+
+    tx.update(walletRef, {
+      balance: Math.round((balance - 1) * 100) / 100,
+      updatedAt: FieldValue.serverTimestamp()
+    });
+    tx.update(orderRef, {
+      status: "accepted",
+      merchantAcceptedAt: FieldValue.serverTimestamp(),
+      merchantAcceptedBy: uid,
+      merchantAcceptanceFee: 1,
+      updatedAt: FieldValue.serverTimestamp()
+    });
+    tx.create(feeRef, {
+      ownerId: uid,
+      ownerRole: "merchant",
+      orderId,
+      type: "merchant_acceptance_fee",
+      amount: 1,
+      currency: "BDT",
+      createdAt: FieldValue.serverTimestamp()
+    });
+    tx.create(db.collection("foodOrderEvents").doc(), {
+      orderId,
+      actorUid: uid,
+      actorRole: "merchant",
+      event: "merchant_accepted",
+      fee: 1,
+      createdAt: FieldValue.serverTimestamp()
+    });
+    result = { success: true, alreadyAccepted: false, fee: 1, balance: Math.round((balance - 1) * 100) / 100 };
+  });
+
+  return result;
+});
+
+/**
+ * FOOD DELIVERY: An approved merchant assigns an approved Food Rider.
+ * Assignment itself does not charge the rider; the BDT 1 fee is charged
+ * only when that rider accepts the assignment.
+ */
+exports.assignFoodRider = onCall(async (request) => {
+  const uid = requireUser(request);
+  const orderId = String(request.data?.orderId || "").trim();
+  const riderId = String(request.data?.riderId || "").trim();
+  if (!orderId || orderId.includes("/") || !riderId || riderId.includes("/")) {
+    throw new HttpsError("invalid-argument", "সঠিক orderId ও riderId দিন।");
+  }
+
+  const orderRef = db.collection("foodOrders").doc(orderId);
+  const merchantRef = db.collection("merchantProfiles").doc(uid);
+  const riderRef = db.collection("foodRiderProfiles").doc(riderId);
+
+  await db.runTransaction(async (tx) => {
+    const [orderSnap, merchantSnap, riderSnap] = await Promise.all([
+      tx.get(orderRef), tx.get(merchantRef), tx.get(riderRef)
+    ]);
+    if (!orderSnap.exists) throw new HttpsError("not-found", "অর্ডার পাওয়া যায়নি।");
+    if (!merchantSnap.exists || merchantSnap.data().role !== "merchant" || merchantSnap.data().status !== "approved") {
+      throw new HttpsError("permission-denied", "অনুমোদিত Merchant অ্যাকাউন্ট প্রয়োজন।");
+    }
+    if (!riderSnap.exists || riderSnap.data().role !== "food_rider" || riderSnap.data().status !== "approved") {
+      throw new HttpsError("failed-precondition", "নির্বাচিত Food Rider অনুমোদিত নন।");
+    }
+    const order = orderSnap.data();
+    if (order.merchantId !== uid) throw new HttpsError("permission-denied", "এই অর্ডার আপনার Merchant অ্যাকাউন্টের নয়।");
+    if (!order.merchantAcceptedAt || !["accepted", "preparing", "ready", "rider_assigned"].includes(order.status)) {
+      throw new HttpsError("failed-precondition", "Merchant অর্ডার গ্রহণ করার পর Rider বরাদ্দ করা যাবে।");
+    }
+    if (order.riderAcceptedAt) throw new HttpsError("failed-precondition", "Rider ইতিমধ্যে অর্ডার গ্রহণ করেছেন।");
+
+    tx.update(orderRef, {
+      assignedRiderId: riderId,
+      riderAssignedAt: FieldValue.serverTimestamp(),
+      status: order.status === "ready" ? "rider_assigned" : order.status,
+      updatedAt: FieldValue.serverTimestamp()
+    });
+    tx.create(db.collection("foodOrderEvents").doc(), {
+      orderId,
+      actorUid: uid,
+      actorRole: "merchant",
+      event: "rider_assigned",
+      assignedRiderId: riderId,
+      createdAt: FieldValue.serverTimestamp()
+    });
+  });
+
+  return { success: true, orderId, assignedRiderId: riderId };
+});
+
+/**
+ * FOOD DELIVERY: Only the specifically assigned, approved rider can accept.
+ * The BDT 1 rider fee is deducted exactly once in the same transaction.
+ */
+exports.acceptFoodDeliveryAssignment = onCall(async (request) => {
+  const uid = requireUser(request);
+  const orderId = String(request.data?.orderId || "").trim();
+  if (!orderId || orderId.includes("/")) {
+    throw new HttpsError("invalid-argument", "সঠিক orderId দিন।");
+  }
+
+  const orderRef = db.collection("foodOrders").doc(orderId);
+  const profileRef = db.collection("foodRiderProfiles").doc(uid);
+  const walletRef = db.collection("foodRiderWallets").doc(uid);
+  const feeId = crypto.createHash("sha256").update("rider_accept:" + orderId + ":" + uid).digest("hex");
+  const feeRef = db.collection("foodWalletTransactions").doc(feeId);
+  let result;
+
+  await db.runTransaction(async (tx) => {
+    const [orderSnap, profileSnap, walletSnap, feeSnap] = await Promise.all([
+      tx.get(orderRef), tx.get(profileRef), tx.get(walletRef), tx.get(feeRef)
+    ]);
+    if (!orderSnap.exists) throw new HttpsError("not-found", "অর্ডার পাওয়া যায়নি।");
+    if (!profileSnap.exists || profileSnap.data().role !== "food_rider" || profileSnap.data().status !== "approved") {
+      throw new HttpsError("permission-denied", "অনুমোদিত Food Rider অ্যাকাউন্ট প্রয়োজন।");
+    }
+    const order = orderSnap.data();
+    if (order.assignedRiderId !== uid) throw new HttpsError("permission-denied", "এই ডেলিভারি আপনার নামে বরাদ্দ নয়।");
+
+    if (order.riderAcceptedAt || feeSnap.exists) {
+      result = { success: true, alreadyAccepted: true, fee: 1 };
+      return;
+    }
+    if (!order.merchantAcceptedAt || !["ready", "rider_assigned"].includes(order.status)) {
+      throw new HttpsError("failed-precondition", "Merchant-এর প্রস্তুত করা ও বরাদ্দকৃত অর্ডার গ্রহণ করা যাবে।");
+    }
+    if (!walletSnap.exists) throw new HttpsError("failed-precondition", "Food Rider Wallet পাওয়া যায়নি।");
+    const balance = Number(walletSnap.data().balance);
+    if (!Number.isFinite(balance) || balance < 1) {
+      throw new HttpsError("failed-precondition", "ডেলিভারি গ্রহণের জন্য Wallet-এ কমপক্ষে ৳১ থাকতে হবে।");
+    }
+
+    tx.update(walletRef, {
+      balance: Math.round((balance - 1) * 100) / 100,
+      updatedAt: FieldValue.serverTimestamp()
+    });
+    tx.update(orderRef, {
+      riderId: uid,
+      riderAcceptedAt: FieldValue.serverTimestamp(),
+      riderAcceptanceFee: 1,
+      updatedAt: FieldValue.serverTimestamp()
+    });
+    tx.create(feeRef, {
+      ownerId: uid,
+      ownerRole: "food_rider",
+      orderId,
+      type: "rider_acceptance_fee",
+      amount: 1,
+      currency: "BDT",
+      createdAt: FieldValue.serverTimestamp()
+    });
+    tx.create(db.collection("foodOrderEvents").doc(), {
+      orderId,
+      actorUid: uid,
+      actorRole: "food_rider",
+      event: "rider_accepted",
+      fee: 1,
+      createdAt: FieldValue.serverTimestamp()
+    });
+    result = { success: true, alreadyAccepted: false, fee: 1, balance: Math.round((balance - 1) * 100) / 100 };
+  });
+
+  return result;
+});
