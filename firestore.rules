@@ -1,0 +1,523 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ---------------------------------------------------------
+    // SHARED ROLE HELPERS
+    // ---------------------------------------------------------
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return signedIn() && request.auth.token.admin == true;
+    }
+
+    function isApprovedDriver(driverId) {
+      return signedIn()
+        && request.auth.uid == driverId
+        && exists(/databases/$(database)/documents/driverApplications/$(driverId))
+        && get(/databases/$(database)/documents/driverApplications/$(driverId)).data.status == 'approved';
+    }
+
+    function isApprovedMerchant(merchantId) {
+      return signedIn()
+        && request.auth.uid == merchantId
+        && exists(/databases/$(database)/documents/merchantProfiles/$(merchantId))
+        && get(/databases/$(database)/documents/merchantProfiles/$(merchantId)).data.role == 'merchant'
+        && get(/databases/$(database)/documents/merchantProfiles/$(merchantId)).data.status == 'approved';
+    }
+
+    function isApprovedFoodRider(riderId) {
+      return signedIn()
+        && request.auth.uid == riderId
+        && exists(/databases/$(database)/documents/foodRiderProfiles/$(riderId))
+        && get(/databases/$(database)/documents/foodRiderProfiles/$(riderId)).data.role == 'food_rider'
+        && get(/databases/$(database)/documents/foodRiderProfiles/$(riderId)).data.status == 'approved';
+    }
+
+    function isFoodCustomer(customerId) {
+      return signedIn()
+        && request.auth.uid == customerId
+        && exists(/databases/$(database)/documents/foodCustomerProfiles/$(customerId))
+        && get(/databases/$(database)/documents/foodCustomerProfiles/$(customerId)).data.role == 'food_customer';
+    }
+
+    function isActiveRide(bookingId) {
+      return signedIn()
+        && exists(/databases/$(database)/documents/rideBookings/$(bookingId))
+        && get(/databases/$(database)/documents/rideBookings/$(bookingId)).data.status in ['accepted', 'in_progress'];
+    }
+
+    function isRideParticipant(bookingId) {
+      return isActiveRide(bookingId)
+        && (
+          get(/databases/$(database)/documents/rideBookings/$(bookingId)).data.passengerId == request.auth.uid
+          || (
+            get(/databases/$(database)/documents/rideBookings/$(bookingId)).data.driverId == request.auth.uid
+            && isApprovedDriver(request.auth.uid)
+          )
+        );
+    }
+
+    // ---------------------------------------------------------
+    // EXISTING RIDE-SHARING RULES — PRESERVED
+    // ---------------------------------------------------------
+
+    match /driverApplications/{driverId} {
+      allow read: if isAdmin() || (signedIn() && request.auth.uid == driverId);
+
+      allow create: if signedIn()
+        && request.auth.uid == driverId
+        && request.resource.data.keys().hasAll([
+          'uid', 'fullName', 'email', 'phone', 'vehicleType', 'status', 'submittedAt'
+        ])
+        && request.resource.data.keys().hasOnly([
+          'uid', 'fullName', 'email', 'phone', 'vehicleType', 'status', 'submittedAt'
+        ])
+        && request.resource.data.uid == driverId
+        && request.resource.data.email == request.auth.token.email
+        && request.resource.data.fullName is string
+        && request.resource.data.fullName.size() >= 2
+        && request.resource.data.phone is string
+        && request.resource.data.phone.matches('^01[3-9][0-9]{8}$')
+        && request.resource.data.vehicleType in ['bike', 'car']
+        && request.resource.data.status == 'pending'
+        && request.resource.data.submittedAt == request.time;
+
+      allow update: if isAdmin()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'reviewedBy', 'reviewedAt'])
+        && request.resource.data.status in ['approved', 'rejected']
+        && request.resource.data.reviewedBy == request.auth.uid
+        && request.resource.data.reviewedAt == request.time;
+
+      allow delete: if false;
+    }
+
+    match /driverPresence/{driverId} {
+      allow read: if isAdmin() || (signedIn() && request.auth.uid == driverId);
+
+      allow create: if isApprovedDriver(driverId)
+        && request.resource.data.keys().hasAll(['uid', 'online', 'updatedAt'])
+        && request.resource.data.keys().hasOnly(['uid', 'online', 'updatedAt'])
+        && request.resource.data.uid == driverId
+        && request.resource.data.online is bool
+        && request.resource.data.updatedAt == request.time;
+
+      allow update: if (
+          isApprovedDriver(driverId)
+          || (isAdmin() && request.resource.data.online == false)
+        )
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['online', 'updatedAt'])
+        && request.resource.data.uid == resource.data.uid
+        && request.resource.data.online is bool
+        && request.resource.data.updatedAt == request.time;
+
+      allow delete: if false;
+    }
+
+    match /passengerProfiles/{passengerId} {
+      allow read: if isAdmin() || (signedIn() && request.auth.uid == passengerId);
+
+      allow create: if signedIn()
+        && request.auth.uid == passengerId
+        && request.resource.data.keys().hasAll(['uid', 'fullName', 'email', 'phone', 'role', 'createdAt'])
+        && request.resource.data.keys().hasOnly(['uid', 'fullName', 'email', 'phone', 'role', 'createdAt'])
+        && request.resource.data.uid == passengerId
+        && request.resource.data.email == request.auth.token.email
+        && request.resource.data.fullName is string
+        && request.resource.data.fullName.size() >= 2
+        && request.resource.data.phone is string
+        && request.resource.data.phone.matches('^01[3-9][0-9]{8}$')
+        && request.resource.data.role == 'passenger'
+        && request.resource.data.createdAt == request.time;
+
+      allow update, delete: if false;
+    }
+
+    match /rideBookings/{bookingId} {
+      allow read: if isAdmin()
+        || (signedIn() && resource.data.passengerId == request.auth.uid)
+        || (signedIn() && resource.data.driverId == request.auth.uid && isApprovedDriver(request.auth.uid));
+
+      allow create: if signedIn()
+        && request.resource.data.keys().hasAll([
+          'passengerId', 'pickup', 'destination', 'vehicleType',
+          'distanceKm', 'estimatedFare', 'status', 'createdAt'
+        ])
+        && request.resource.data.keys().hasOnly([
+          'passengerId', 'pickup', 'destination', 'vehicleType',
+          'distanceKm', 'estimatedFare', 'status', 'createdAt'
+        ])
+        && request.resource.data.passengerId == request.auth.uid
+        && request.resource.data.pickup is string
+        && request.resource.data.pickup.size() >= 2
+        && request.resource.data.pickup.size() <= 300
+        && request.resource.data.destination is string
+        && request.resource.data.destination.size() >= 2
+        && request.resource.data.destination.size() <= 300
+        && request.resource.data.vehicleType in ['bike', 'car']
+        && request.resource.data.distanceKm is number
+        && request.resource.data.distanceKm > 0
+        && request.resource.data.distanceKm <= 200
+        && request.resource.data.estimatedFare is number
+        && request.resource.data.estimatedFare > 0
+        && request.resource.data.estimatedFare <= 50000
+        && request.resource.data.status == 'pending'
+        && request.resource.data.createdAt == request.time;
+
+      allow update: if isAdmin()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'status', 'driverId', 'assignedAt', 'driverName', 'driverPhone'
+        ])
+        && request.resource.data.status in ['pending', 'accepted', 'rejected', 'completed', 'cancelled']
+        && (
+          !request.resource.data.diff(resource.data).affectedKeys().hasAny(['driverId'])
+          || (
+            request.resource.data.driverId is string
+            && exists(/databases/$(database)/documents/driverApplications/$(request.resource.data.driverId))
+            && get(/databases/$(database)/documents/driverApplications/$(request.resource.data.driverId)).data.status == 'approved'
+            && request.resource.data.status == 'accepted'
+          )
+        )
+        && (
+          !request.resource.data.diff(resource.data).affectedKeys().hasAny(['assignedAt'])
+          || request.resource.data.assignedAt == request.time
+        )
+        && (
+          !request.resource.data.diff(resource.data).affectedKeys().hasAny(['driverName'])
+          || (request.resource.data.driverName is string
+            && request.resource.data.driverName.size() >= 2
+            && request.resource.data.driverName.size() <= 100)
+        )
+        && (
+          !request.resource.data.diff(resource.data).affectedKeys().hasAny(['driverPhone'])
+          || (request.resource.data.driverPhone is string
+            && request.resource.data.driverPhone.matches('^01[3-9][0-9]{8}$'))
+        );
+
+      allow update: if signedIn()
+        && isApprovedDriver(request.auth.uid)
+        && resource.data.driverId == request.auth.uid
+        && resource.data.status == 'accepted'
+        && !('driverResponse' in resource.data)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['driverResponse', 'driverRespondedAt'])
+        && request.resource.data.driverResponse in ['accepted', 'rejected']
+        && request.resource.data.driverRespondedAt == request.time;
+
+      allow delete: if false;
+    }
+
+    match /driverPayments/{paymentId} {
+      allow read: if isAdmin() || (signedIn() && resource.data.driverId == request.auth.uid);
+
+      allow create: if isAdmin()
+        && request.resource.data.keys().hasAll([
+          'driverId', 'driverName', 'amount', 'method', 'reference',
+          'paidAt', 'recordedBy', 'createdAt'
+        ])
+        && request.resource.data.keys().hasOnly([
+          'driverId', 'driverName', 'amount', 'method', 'reference',
+          'paidAt', 'recordedBy', 'createdAt'
+        ])
+        && request.resource.data.driverId is string
+        && request.resource.data.driverName is string
+        && request.resource.data.driverName.size() >= 2
+        && request.resource.data.driverName.size() <= 100
+        && request.resource.data.amount is number
+        && request.resource.data.amount > 0
+        && request.resource.data.method in ['bKash', 'Nagad', 'Rocket', 'Bank', 'Cash', 'Other']
+        && request.resource.data.reference is string
+        && request.resource.data.paidAt == request.time
+        && request.resource.data.recordedBy == request.auth.uid
+        && request.resource.data.createdAt == request.time;
+
+      allow update, delete: if false;
+    }
+
+    match /passengerWallets/{passengerId} {
+      allow read: if isAdmin() || (signedIn() && request.auth.uid == passengerId);
+
+      allow create: if isAdmin()
+        && request.resource.data.keys().hasOnly(['balance', 'updatedAt'])
+        && request.resource.data.balance is number
+        && request.resource.data.balance >= 0
+        && request.resource.data.updatedAt == request.time;
+
+      allow update: if isAdmin()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['balance', 'updatedAt'])
+        && request.resource.data.balance is number
+        && request.resource.data.balance >= 0
+        && request.resource.data.updatedAt == request.time;
+
+      allow delete: if false;
+    }
+
+    match /depositRequests/{requestId} {
+      allow read: if isAdmin() || (signedIn() && resource.data.passengerId == request.auth.uid);
+
+      allow create: if signedIn()
+        && request.resource.data.keys().hasAll([
+          'passengerId', 'amount', 'method', 'transactionId', 'status', 'createdAt'
+        ])
+        && request.resource.data.keys().hasOnly([
+          'passengerId', 'amount', 'method', 'transactionId', 'status', 'createdAt'
+        ])
+        && request.resource.data.passengerId == request.auth.uid
+        && request.resource.data.amount is number
+        && request.resource.data.amount >= 10
+        && request.resource.data.amount <= 50000
+        && request.resource.data.amount % 1 == 0
+        && request.resource.data.method in ['bKash', 'Nagad', 'Rocket', 'Bank']
+        && request.resource.data.transactionId is string
+        && request.resource.data.transactionId.size() >= 5
+        && request.resource.data.transactionId.size() <= 100
+        && request.resource.data.status == 'pending'
+        && request.resource.data.createdAt == request.time;
+
+      allow update: if isAdmin()
+        && resource.data.status == 'pending'
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'reviewedBy', 'reviewedAt'])
+        && request.resource.data.status in ['approved', 'rejected']
+        && request.resource.data.reviewedBy == request.auth.uid
+        && request.resource.data.reviewedAt == request.time;
+
+      allow delete: if false;
+    }
+
+    match /walletTransactions/{transactionId} {
+      allow read: if isAdmin()
+        || (signedIn() && (
+          resource.data.userId == request.auth.uid
+          || resource.data.passengerId == request.auth.uid
+          || resource.data.driverId == request.auth.uid
+        ));
+
+      allow create: if isAdmin()
+        && request.resource.data.keys().hasAll([
+          'userId', 'passengerId', 'type', 'amount', 'method',
+          'transactionId', 'depositRequestId', 'createdAt'
+        ])
+        && request.resource.data.keys().hasOnly([
+          'userId', 'passengerId', 'type', 'amount', 'method',
+          'transactionId', 'depositRequestId', 'createdAt'
+        ])
+        && request.resource.data.userId is string
+        && request.resource.data.passengerId is string
+        && request.resource.data.userId == request.resource.data.passengerId
+        && request.resource.data.type == 'deposit'
+        && request.resource.data.amount is number
+        && request.resource.data.amount > 0
+        && request.resource.data.amount <= 50000
+        && request.resource.data.method in ['bKash', 'Nagad', 'Rocket', 'Bank']
+        && request.resource.data.transactionId is string
+        && request.resource.data.transactionId.size() >= 5
+        && request.resource.data.transactionId.size() <= 100
+        && request.resource.data.depositRequestId is string
+        && request.resource.data.createdAt == request.time;
+
+      allow update, delete: if false;
+    }
+
+    match /withdrawalRequests/{requestId} {
+      allow read: if isAdmin() || (signedIn() && resource.data.userId == request.auth.uid);
+      allow create, update, delete: if false;
+    }
+
+    match /driverWallets/{driverId} {
+      allow read: if isAdmin() || (signedIn() && request.auth.uid == driverId && isApprovedDriver(driverId));
+      allow create, update, delete: if false;
+    }
+
+    match /rideLocations/{bookingId}/participants/{participantUid} {
+      allow read: if isRideParticipant(bookingId);
+
+      allow create, update: if isRideParticipant(bookingId)
+        && request.auth.uid == participantUid
+        && request.resource.data.keys().hasAll(['uid', 'role', 'lat', 'lng', 'accuracy', 'updatedAt'])
+        && request.resource.data.keys().hasOnly(['uid', 'role', 'lat', 'lng', 'accuracy', 'updatedAt'])
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.lat is number
+        && request.resource.data.lat >= -90
+        && request.resource.data.lat <= 90
+        && request.resource.data.lng is number
+        && request.resource.data.lng >= -180
+        && request.resource.data.lng <= 180
+        && request.resource.data.accuracy is number
+        && request.resource.data.accuracy >= 0
+        && request.resource.data.updatedAt == request.time
+        && (
+          (request.auth.uid == get(/databases/$(database)/documents/rideBookings/$(bookingId)).data.passengerId
+            && request.resource.data.role == 'passenger')
+          || (request.auth.uid == get(/databases/$(database)/documents/rideBookings/$(bookingId)).data.driverId
+            && isApprovedDriver(request.auth.uid)
+            && request.resource.data.role == 'driver')
+        );
+
+      allow delete: if isRideParticipant(bookingId) && request.auth.uid == participantUid;
+    }
+
+    // ---------------------------------------------------------
+    // NEW FOOD-DELIVERY ROLE PROFILES
+    // Collection contract: one profile document per Firebase Auth UID.
+    // Users may submit a pending application; only Admin can approve/reject.
+    // ---------------------------------------------------------
+
+    match /foodCustomerProfiles/{customerId} {
+      allow read: if isAdmin() || (signedIn() && request.auth.uid == customerId);
+
+      allow create: if signedIn()
+        && request.auth.uid == customerId
+        && request.resource.data.keys().hasAll(['uid', 'fullName', 'email', 'phone', 'role', 'createdAt'])
+        && request.resource.data.keys().hasOnly(['uid', 'fullName', 'email', 'phone', 'role', 'createdAt'])
+        && request.resource.data.uid == customerId
+        && request.resource.data.email == request.auth.token.email
+        && request.resource.data.fullName is string
+        && request.resource.data.fullName.size() >= 2
+        && request.resource.data.phone is string
+        && request.resource.data.phone.matches('^01[3-9][0-9]{8}$')
+        && request.resource.data.role == 'food_customer'
+        && request.resource.data.createdAt == request.time;
+
+      allow update, delete: if false;
+    }
+
+    match /merchantProfiles/{merchantId} {
+      allow read: if isAdmin() || (signedIn() && request.auth.uid == merchantId);
+
+      allow create: if signedIn()
+        && request.auth.uid == merchantId
+        && request.resource.data.keys().hasAll([
+          'uid', 'businessName', 'ownerName', 'email', 'phone', 'role', 'status', 'createdAt'
+        ])
+        && request.resource.data.keys().hasOnly([
+          'uid', 'businessName', 'ownerName', 'email', 'phone', 'role', 'status', 'createdAt'
+        ])
+        && request.resource.data.uid == merchantId
+        && request.resource.data.businessName is string
+        && request.resource.data.businessName.size() >= 2
+        && request.resource.data.ownerName is string
+        && request.resource.data.ownerName.size() >= 2
+        && request.resource.data.email == request.auth.token.email
+        && request.resource.data.phone is string
+        && request.resource.data.phone.matches('^01[3-9][0-9]{8}$')
+        && request.resource.data.role == 'merchant'
+        && request.resource.data.status == 'pending'
+        && request.resource.data.createdAt == request.time;
+
+      allow update: if isAdmin()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'status', 'reviewedBy', 'reviewedAt', 'adminNote'
+        ])
+        && request.resource.data.status in ['approved', 'rejected', 'suspended']
+        && request.resource.data.reviewedBy == request.auth.uid
+        && request.resource.data.reviewedAt == request.time;
+
+      allow delete: if false;
+    }
+
+    match /foodRiderProfiles/{riderId} {
+      allow read: if isAdmin() || (signedIn() && request.auth.uid == riderId);
+
+      allow create: if signedIn()
+        && request.auth.uid == riderId
+        && request.resource.data.keys().hasAll([
+          'uid', 'fullName', 'email', 'phone', 'role', 'status', 'createdAt'
+        ])
+        && request.resource.data.keys().hasOnly([
+          'uid', 'fullName', 'email', 'phone', 'role', 'status', 'createdAt'
+        ])
+        && request.resource.data.uid == riderId
+        && request.resource.data.fullName is string
+        && request.resource.data.fullName.size() >= 2
+        && request.resource.data.email == request.auth.token.email
+        && request.resource.data.phone is string
+        && request.resource.data.phone.matches('^01[3-9][0-9]{8}$')
+        && request.resource.data.role == 'food_rider'
+        && request.resource.data.status == 'pending'
+        && request.resource.data.createdAt == request.time;
+
+      allow update: if isAdmin()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'status', 'reviewedBy', 'reviewedAt', 'adminNote'
+        ])
+        && request.resource.data.status in ['approved', 'rejected', 'suspended']
+        && request.resource.data.reviewedBy == request.auth.uid
+        && request.resource.data.reviewedAt == request.time;
+
+      allow delete: if false;
+    }
+
+    // ---------------------------------------------------------
+    // FOOD-DELIVERY WALLETS
+    // Admin manually tops up/adjusts balances. Clients can only read
+    // their own wallet. Fee deductions must be implemented server-side.
+    // Never reuse driverWallets for Food Riders.
+    // ---------------------------------------------------------
+
+    match /merchantWallets/{merchantId} {
+      allow read: if isAdmin() || (signedIn() && request.auth.uid == merchantId && isApprovedMerchant(merchantId));
+
+      allow create: if isAdmin()
+        && request.resource.data.keys().hasOnly(['balance', 'updatedAt'])
+        && request.resource.data.balance is number
+        && request.resource.data.balance >= 0
+        && request.resource.data.updatedAt == request.time;
+
+      allow update: if isAdmin()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['balance', 'updatedAt'])
+        && request.resource.data.balance is number
+        && request.resource.data.balance >= 0
+        && request.resource.data.updatedAt == request.time;
+
+      allow delete: if false;
+    }
+
+    match /foodRiderWallets/{riderId} {
+      allow read: if isAdmin() || (signedIn() && request.auth.uid == riderId && isApprovedFoodRider(riderId));
+
+      allow create: if isAdmin()
+        && request.resource.data.keys().hasOnly(['balance', 'updatedAt'])
+        && request.resource.data.balance is number
+        && request.resource.data.balance >= 0
+        && request.resource.data.updatedAt == request.time;
+
+      allow update: if isAdmin()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['balance', 'updatedAt'])
+        && request.resource.data.balance is number
+        && request.resource.data.balance >= 0
+        && request.resource.data.updatedAt == request.time;
+
+      allow delete: if false;
+    }
+
+    // Food order reads are limited to the customer, owning merchant,
+    // assigned approved rider, and Admin. Writes are intentionally closed
+    // until the production order schema and server-side fee transaction exist.
+    match /foodOrders/{orderId} {
+      allow read: if isAdmin()
+        || (signedIn() && resource.data.customerId == request.auth.uid)
+        || (signedIn() && resource.data.merchantId == request.auth.uid && isApprovedMerchant(request.auth.uid))
+        || (signedIn() && resource.data.riderId == request.auth.uid && isApprovedFoodRider(request.auth.uid));
+
+      allow create, update, delete: if false;
+    }
+
+    // Food wallet ledger is private to its owner and Admin.
+    // Only trusted server code should create immutable fee/credit entries.
+    match /foodWalletTransactions/{entryId} {
+      allow read: if isAdmin()
+        || (signedIn() && resource.data.ownerId == request.auth.uid);
+
+      allow create, update, delete: if false;
+    }
+
+    // ---------------------------------------------------------
+    // DEFAULT DENY — all unspecified collections and operations.
+    // ---------------------------------------------------------
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
