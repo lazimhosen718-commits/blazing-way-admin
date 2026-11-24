@@ -407,7 +407,9 @@ onAuthStateChanged(auth,async user=>{
 
  stopApplications=stopPresence=stopBookings=stopPayments=stopDeposits=null;
  stopFoodCustomers=stopMerchants=stopFoodRiders=stopFoodOrders=null;
- stopMerchantWallets=stopFoodRiderWallets=stopFoodLedger=null;\n if(stopAdminAccounts)stopAdminAccounts();\n stopAdminAccounts=null;
+ stopMerchantWallets=stopFoodRiderWallets=stopFoodLedger=null;
+ if(stopAdminAccounts)stopAdminAccounts();
+ stopAdminAccounts=null;
 
  availableDrivers=[];
  latestBookingDocs=[];
