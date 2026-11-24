@@ -62,6 +62,24 @@ button:disabled{opacity:.5;cursor:not-allowed}
 <button id="logoutBtn">Logout</button>
 </div>
 
+<div class="card" id="adminAccountManagement">
+ <h2>🔐 Admin ID তৈরি ও নিয়ন্ত্রণ</h2>
+ <p class="small">শুধু Super Admin নতুন Service Admin তৈরি করতে পারবেন। প্রতিটি Admin-এর আলাদা Login থাকবে।</p>
+ <div class="grid">
+  <div><label>Admin-এর নাম</label><input id="newAdminName" type="text" placeholder="নাম"></div>
+  <div><label>Admin Email</label><input id="newAdminEmail" type="email" placeholder="admin@example.com"></div>
+  <div><label>Temporary Password (কমপক্ষে ৮ অক্ষর)</label><input id="newAdminPassword" type="password" placeholder="Password"></div>
+  <div><label>দায়িত্ব নির্বাচন</label><select id="newAdminRole">
+   <option value="ride">Ride Admin</option><option value="food">Food Admin</option>
+   <option value="food_rider">Food Rider Admin</option><option value="finance">Finance Admin</option>
+   <option value="support">Customer Support Admin</option><option value="system">System Admin</option>
+  </select></div>
+ </div>
+ <button id="createAdminBtn" class="approveBtn">নতুন Admin ID তৈরি করুন</button>
+ <p id="adminCreateMessage" class="small"></p>
+ <h3>তৈরি করা Admin Account</h3><div id="adminAccountList">লোড হচ্ছে...</div>
+</div>
+
 <div class="grid">
 
 <div class="card">
@@ -248,6 +266,7 @@ Admin-এর ১% কমিশন আলাদা।
 <script type="module">
 
 import {initializeApp} from "https://www.gstatic.com/firebasejs/12.0.0/firebase-app.js";
+import {getFunctions,httpsCallable} from "https://www.gstatic.com/firebasejs/12.0.0/firebase-functions.js";
 
 import {
  getAuth,onAuthStateChanged,signInWithEmailAndPassword,
@@ -273,7 +292,7 @@ const app=initializeApp({
 });
 
 const auth=getAuth(app);
-const db=getFirestore(app);
+const db=getFirestore(app);\nconst functions=getFunctions(app,"asia-south1");
 const $=id=>document.getElementById(id);
 
 let stopApplications=null;
@@ -287,7 +306,7 @@ let stopFoodRiders=null;
 let stopFoodOrders=null;
 let stopMerchantWallets=null;
 let stopFoodRiderWallets=null;
-let stopFoodLedger=null;
+let stopFoodLedger=null;\nlet stopAdminAccounts=null;
 
 let availableDrivers=[];
 let latestBookingDocs=[];
@@ -343,6 +362,38 @@ $("loginBtn").onclick=async()=>{
  }
 };
 
+// SUPER ADMIN: CREATE AND LIST SERVICE ADMIN ACCOUNTS
+$("createAdminBtn").onclick=async()=>{
+ const name=$("newAdminName").value.trim();
+ const email=$("newAdminEmail").value.trim();
+ const password=$("newAdminPassword").value;
+ const role=$("newAdminRole").value;
+ const button=$("createAdminBtn");
+ $("adminCreateMessage").textContent="";
+ if(name.length<2||!email||password.length<8){$("adminCreateMessage").textContent="নাম, Email এবং কমপক্ষে ৮ অক্ষরের Password দিন।";return;}
+ button.disabled=true;
+ try{
+  const create= httpsCallable(functions,"createServiceAdmin");
+  const result=await create({displayName:name,email,password,role});
+  $("adminCreateMessage").textContent="Admin ID তৈরি হয়েছে: "+result.data.uid+" ("+role+")";
+  $("newAdminName").value="";$("newAdminEmail").value="";$("newAdminPassword").value="";
+ }catch(error){
+  console.error(error);
+  $("adminCreateMessage").textContent="তৈরি হয়নি: "+(error.message||error.code);
+ }finally{button.disabled=false;}
+};
+function loadAdminAccounts(){
+ stopAdminAccounts=onSnapshot(collection(db,"adminAccounts"),snapshot=>{
+  const area=$("adminAccountList");area.replaceChildren();
+  if(snapshot.empty){area.textContent="এখনো কোনো Service Admin তৈরি হয়নি।";return;}
+  snapshot.forEach(item=>{
+   const d=item.data();const card=foodCard(d.displayName||d.email||item.id,[
+    ["Email",d.email||"—"],["Role",d.role||"—"],["UID",item.id],["Status",d.status||"active"]
+   ]);area.appendChild(card);
+  });
+ },error=>{$("adminAccountList").textContent="Admin list load হয়নি: "+error.code;});
+}
+
 // AUTH CHECK
 onAuthStateChanged(auth,async user=>{
 
@@ -361,7 +412,7 @@ onAuthStateChanged(auth,async user=>{
 
  stopApplications=stopPresence=stopBookings=stopPayments=stopDeposits=null;
  stopFoodCustomers=stopMerchants=stopFoodRiders=stopFoodOrders=null;
- stopMerchantWallets=stopFoodRiderWallets=stopFoodLedger=null;
+ stopMerchantWallets=stopFoodRiderWallets=stopFoodLedger=null;\n if(stopAdminAccounts)stopAdminAccounts();\n stopAdminAccounts=null;
 
  availableDrivers=[];
  latestBookingDocs=[];
@@ -388,7 +439,7 @@ onAuthStateChanged(auth,async user=>{
    loadRideBookings();
    loadPayments();
    loadDepositRequests();
-   loadFoodDeliveryAdmin();
+   loadFoodDeliveryAdmin();\n   loadAdminAccounts();
 
   }else{
    await signOut(auth);
