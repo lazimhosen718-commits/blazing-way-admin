@@ -594,3 +594,46 @@ exports.placeFoodOrder = onCall(async (request) => {
 
   return { success: true, orderId: orderRef.id, subtotal: orderTotal, status: "pending" };
 });
+
+/**
+ * FOOD DELIVERY: Rider updates delivery progress after accepting assignment.
+ * Only the assigned rider can move an accepted order to picked_up/delivered.
+ */
+exports.updateFoodDeliveryStatus = onCall(async (request) => {
+  const uid = requireUser(request);
+  const orderId = String(request.data?.orderId || "").trim();
+  const nextStatus = String(request.data?.status || "").trim();
+  if (!orderId || orderId.includes("/") || !["picked_up", "delivered"].includes(nextStatus)) {
+    throw new HttpsError("invalid-argument", "সঠিক orderId এবং picked_up/delivered status দিন।");
+  }
+
+  const orderRef = db.collection("foodOrders").doc(orderId);
+  const profileRef = db.collection("foodRiderProfiles").doc(uid);
+  await db.runTransaction(async (tx) => {
+    const [orderSnap, profileSnap] = await Promise.all([tx.get(orderRef), tx.get(profileRef)]);
+    if (!orderSnap.exists) throw new HttpsError("not-found", "অর্ডার পাওয়া যায়নি।");
+    if (!profileSnap.exists || profileSnap.data().role !== "food_rider" || profileSnap.data().status !== "approved") {
+      throw new HttpsError("permission-denied", "অনুমোদিত Food Rider অ্যাকাউন্ট প্রয়োজন।");
+    }
+    const order = orderSnap.data();
+    if (order.riderId !== uid || !order.riderAcceptedAt) {
+      throw new HttpsError("permission-denied", "এই ডেলিভারি আপনার নামে গ্রহণ করা হয়নি।");
+    }
+    if (nextStatus === "picked_up" && order.status !== "rider_assigned") {
+      throw new HttpsError("failed-precondition", "শুধু গ্রহণ করা অর্ডার Pickup করা যাবে।");
+    }
+    if (nextStatus === "delivered" && order.status !== "picked_up") {
+      throw new HttpsError("failed-precondition", "Pickup সম্পন্ন করার পর Delivered করা যাবে।");
+    }
+    tx.update(orderRef, {
+      status: nextStatus,
+      ...(nextStatus === "picked_up" ? { pickedUpAt: FieldValue.serverTimestamp() } : { deliveredAt: FieldValue.serverTimestamp() }),
+      updatedAt: FieldValue.serverTimestamp()
+    });
+    tx.create(db.collection("foodOrderEvents").doc(), {
+      orderId, actorUid: uid, actorRole: "food_rider", event: nextStatus,
+      createdAt: FieldValue.serverTimestamp()
+    });
+  });
+  return { success: true, orderId, status: nextStatus };
+});
