@@ -17,11 +17,13 @@ service cloud.firestore {
     }
 
     function hasAdminRole(role) {
-      return signedIn()
+      return isSuperAdmin() || (
+        signedIn()
         && exists(/databases/$(database)/documents/adminAccounts/$(request.auth.uid))
         && get(/databases/$(database)/documents/adminAccounts/$(request.auth.uid)).data.status == 'active'
         && get(/databases/$(database)/documents/adminAccounts/$(request.auth.uid)).data.roles is list
-        && role in get(/databases/$(database)/documents/adminAccounts/$(request.auth.uid)).data.roles;
+        && role in get(/databases/$(database)/documents/adminAccounts/$(request.auth.uid)).data.roles
+      );
     }
 
     function isRideAdmin() { return hasAdminRole('ride'); }
