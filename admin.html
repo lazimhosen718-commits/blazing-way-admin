@@ -82,17 +82,17 @@ button:disabled{opacity:.5;cursor:not-allowed}
 
 <div class="grid">
 
-<div class="card">
+<div class="card" id="driverApplicationsSummary">
 <h3>Driver Applications</h3>
 <p id="driverCount">লোড হচ্ছে...</p>
 </div>
 
-<div class="card">
+<div class="card" id="passengerManagementSummary">
 <h3>Passenger Management</h3>
 <p>Passenger Booking ও Ride Monitoring</p>
 </div>
 
-<div class="card">
+<div class="card" id="rideMonitoringSummary">
 <h3>Ride Monitoring</h3>
 <p id="rideCount">লোড হচ্ছে...</p>
 </div>
@@ -133,24 +133,24 @@ button:disabled{opacity:.5;cursor:not-allowed}
 
 </div>
 
-<div class="card">
+<div class="card" id="onlineDriversCard">
 <h2>🟢 Online Drivers</h2>
 <div id="onlineDrivers">লোড হচ্ছে...</div>
 </div>
 
-<div class="card">
+<div class="card" id="driverApplicationsCard">
 <h2>চালকদের আবেদন তালিকা</h2>
 <div id="applications">লোড হচ্ছে...</div>
 </div>
 
-<div class="card">
+<div class="card" id="rideBookingsCard">
 <h2>🚕 Passenger Ride Bookings</h2>
 <p id="bookingCount">লোড হচ্ছে...</p>
 <div id="rideBookings">লোড হচ্ছে...</div>
 </div>
 
 <!-- DRIVER PAYMENT MANAGEMENT -->
-<div class="card">
+<div class="card" id="driverPaymentManagement">
 <h2>💰 Driver Payment Management</h2>
 
 <p class="small">
@@ -218,7 +218,7 @@ Driver-এর আয় = সম্পন্ন ভাড়া − প্রযোজ
 </div>
 
 <!-- PASSENGER DEPOSIT APPROVAL -->
-<div class="card">
+<div class="card" id="passengerDepositApproval">
  <h2>💳 Passenger Deposit Approval</h2>
  <p class="small">যাত্রীর পাঠানো টাকা ও Transaction ID যাচাই করে তারপর Approve করুন। Approve করলে একই Firestore transaction-এ Wallet Balance, Deposit Status এবং Transaction History আপডেট হবে। একই Request দ্বিতীয়বার অনুমোদন করা যাবে না।</p>
  <div class="grid">
@@ -241,40 +241,40 @@ Driver-এর আয় = সম্পন্ন ভাড়া − প্রযোজ
 
 
 <!-- FOOD DELIVERY SUPER ADMIN MANAGEMENT -->
-<div class="card">
+<div class="card" id="foodDeliverySummary">
  <h2>🍔 Food Delivery Management</h2>
  <p class="small">Food Customer, Merchant, Food Rider, Orders, Wallet Balance ও ৳১ নির্ধারিত Fee পর্যবেক্ষণ। Ride Sharing-এর হিসাব অপরিবর্তিত থাকবে।</p>
  <div class="grid">
-  <div class="paymentSummary"><h3>Food Customer</h3><p id="foodCustomerCount">লোড হচ্ছে...</p></div>
-  <div class="paymentSummary"><h3>Merchant</h3><p id="merchantCount">লোড হচ্ছে...</p></div>
-  <div class="paymentSummary"><h3>Food Rider</h3><p id="foodRiderCount">লোড হচ্ছে...</p></div>
-  <div class="paymentSummary"><h3>Food Orders</h3><p id="foodOrderCount">লোড হচ্ছে...</p></div>
+  <div class="paymentSummary" id="foodCustomerSummary"><h3>Food Customer</h3><p id="foodCustomerCount">লোড হচ্ছে...</p></div>
+  <div class="paymentSummary" id="merchantSummary"><h3>Merchant</h3><p id="merchantCount">লোড হচ্ছে...</p></div>
+  <div class="paymentSummary" id="foodRiderSummary"><h3>Food Rider</h3><p id="foodRiderCount">লোড হচ্ছে...</p></div>
+  <div class="paymentSummary" id="foodOrderSummary"><h3>Food Orders</h3><p id="foodOrderCount">লোড হচ্ছে...</p></div>
  </div>
 </div>
 
-<div class="card">
+<div class="card" id="foodCustomerManagement">
  <h2>👤 Food Customer Management</h2>
  <div id="foodCustomers">লোড হচ্ছে...</div>
 </div>
 
-<div class="card">
+<div class="card" id="merchantManagement">
  <h2>🏪 Merchant Management</h2>
  <p class="small">Pending Merchant আবেদন Approve/Reject এবং প্রয়োজন হলে Suspend করা যাবে।</p>
  <div id="foodMerchants">লোড হচ্ছে...</div>
 </div>
 
-<div class="card">
+<div class="card" id="foodRiderManagement">
  <h2>🛵 Food Rider Management</h2>
  <p class="small">Pending Food Rider আবেদন Approve/Reject এবং প্রয়োজন হলে Suspend করা যাবে।</p>
  <div id="foodRiders">লোড হচ্ছে...</div>
 </div>
 
-<div class="card">
+<div class="card" id="foodOrderMonitoring">
  <h2>📦 Food Order Monitoring</h2>
  <div id="foodOrders">লোড হচ্ছে...</div>
 </div>
 
-<div class="card">
+<div class="card" id="foodWalletReport">
  <h2>💳 Food Wallet & Platform Fee Report</h2>
  <p class="small">প্রতি Merchant accepted order-এ ৳১ এবং প্রতি Food Rider accepted delivery-তে ৳১। এই ফি একবারই কাটা হয়। বাতিল অর্ডারের জন্য অতিরিক্ত ৫% কমিশন নেই।</p>
  <div class="grid">
@@ -338,6 +338,8 @@ let stopMerchantWallets=null;
 let stopFoodRiderWallets=null;
 let stopFoodLedger=null;
 let stopAdminAccounts=null;
+let stopFinanceApplications=null;
+let stopFinanceBookings=null;
 let stopCommissionSettings=null;
 let stopRideOperationsSettings=null;
 let currentAdminRoles=[];
@@ -562,31 +564,30 @@ function loadAdminAccounts(){
  },error=>{$("adminAccountList").textContent="Admin list load হয়নি: "+error.code;});
 }
 
-function hideAdminCardById(id,show){
- const node=$(id);if(!node)return;
- const card=node.closest(".card")||node.parentElement;
- if(card)card.style.display=show?"":"none";
+function setCardVisible(id,visible){
+ const node=$(id);if(node)node.style.display=visible?"":"none";
 }
 function applyAdminRoleVisibility(){
  const ride=currentIsSuperAdmin||currentAdminRoles.includes("ride");
  const food=currentIsSuperAdmin||currentAdminRoles.includes("food");
  const foodRider=currentIsSuperAdmin||currentAdminRoles.includes("food_rider");
  const finance=currentIsSuperAdmin||currentAdminRoles.includes("finance");
- const support=currentIsSuperAdmin||currentAdminRoles.includes("support");
- const system=currentIsSuperAdmin||currentAdminRoles.includes("system");
- ["onlineDrivers","applications","rideBookings"].forEach(id=>hideAdminCardById(id,ride));
- ["foodCustomers","foodMerchants"].forEach(id=>hideAdminCardById(id,food));
- ["foodRiders"].forEach(id=>hideAdminCardById(id,foodRider));
- ["foodOrders"].forEach(id=>hideAdminCardById(id,food||foodRider));
- ["depositRequests"].forEach(id=>hideAdminCardById(id,finance));
- ["adminAccountManagement","commissionSettings","rideOperationsSettings"].forEach(id=>hideAdminCardById(id,currentIsSuperAdmin));
- // Ride payment and Finance-only controls are not exposed to unrelated service admins.
- const headings=[...document.querySelectorAll("h2")];
- headings.forEach(h=>{
-  const t=(h.textContent||"").toLowerCase();
-  if(t.includes("driver payment")){const card=h.closest(".card");if(card)card.style.display=(ride||finance)?"":"none";}
-  if(t.includes("food wallet")){const card=h.closest(".card");if(card)card.style.display=(food||finance)?"":"none";}
- });
+
+ ["driverApplicationsSummary","passengerManagementSummary","rideMonitoringSummary","onlineDriversCard","driverApplicationsCard","rideBookingsCard"].forEach(id=>setCardVisible(id,ride));
+ ["commissionSettings","rideOperationsSettings","adminAccountManagement"].forEach(id=>setCardVisible(id,currentIsSuperAdmin));
+ setCardVisible("driverPaymentManagement",finance);
+ setCardVisible("passengerDepositApproval",finance);
+ setCardVisible("foodDeliverySummary",currentIsSuperAdmin);
+ setCardVisible("foodCustomerSummary",food);
+ setCardVisible("merchantSummary",food);
+ setCardVisible("foodRiderSummary",foodRider);
+ setCardVisible("foodOrderSummary",food||foodRider);
+ setCardVisible("foodCustomerManagement",food);
+ setCardVisible("merchantManagement",food);
+ setCardVisible("foodRiderManagement",foodRider);
+ setCardVisible("foodOrderMonitoring",food||foodRider);
+ setCardVisible("foodWalletReport",finance);
+
  const welcome=document.querySelector("#dashboard > .card h2");
  if(welcome)welcome.textContent=currentIsSuperAdmin?"স্বাগতম, Super Admin!":"স্বাগতম, Service Admin!";
 }
@@ -611,8 +612,11 @@ onAuthStateChanged(auth,async user=>{
  stopFoodCustomers=stopMerchants=stopFoodRiders=stopFoodOrders=null;
  stopMerchantWallets=stopFoodRiderWallets=stopFoodLedger=null;
  if(stopAdminAccounts)stopAdminAccounts();
+ if(stopFinanceApplications)stopFinanceApplications();
+ if(stopFinanceBookings)stopFinanceBookings();
  if(stopRideOperationsSettings)stopRideOperationsSettings();
  stopAdminAccounts=null;
+ stopFinanceApplications=stopFinanceBookings=null;
  stopRideOperationsSettings=null;
 
  availableDrivers=[];
@@ -649,10 +653,14 @@ onAuthStateChanged(auth,async user=>{
     loadApplications();loadOnlineDrivers();loadRideBookings();
    }
    if(currentIsSuperAdmin || currentAdminRoles.includes("finance")){
-    loadPayments();loadDepositRequests();
+    loadPayments();loadDepositRequests();loadFinanceRideData();loadRideCommissionSettings();
    }
    if(currentIsSuperAdmin || currentAdminRoles.includes("food") || currentAdminRoles.includes("food_rider")){
-    loadFoodDeliveryAdmin();
+    loadFoodDeliveryAdmin({
+     food:currentIsSuperAdmin||currentAdminRoles.includes("food"),
+     foodRider:currentIsSuperAdmin||currentAdminRoles.includes("food_rider"),
+     finance:currentIsSuperAdmin||currentAdminRoles.includes("finance")
+    });
    }
    if(currentIsSuperAdmin){loadAdminAccounts();loadRideCommissionSettings();loadRideOperationsSettings();}
   }else{
@@ -1824,29 +1832,47 @@ function renderFoodWalletReport(){
   ]));
  });
 }
-function loadFoodDeliveryAdmin(){
- stopFoodCustomers=onSnapshot(collection(db,"foodCustomerProfiles"),s=>{
-  latestFoodCustomerDocs=s.docs;$("foodCustomerCount").textContent="মোট: "+s.size;renderFoodCustomers();
- },e=>{$("foodCustomers").textContent="Customer data load হয়নি: "+e.code;});
- stopMerchants=onSnapshot(collection(db,"merchantProfiles"),s=>{
-  latestMerchantDocs=s.docs;setFoodCount("merchantCount",s.docs);renderFoodProfiles(s.docs,"foodMerchants","merchantProfiles","merchant");
- },e=>{$("foodMerchants").textContent="Merchant data load হয়নি: "+e.code;});
- stopFoodRiders=onSnapshot(collection(db,"foodRiderProfiles"),s=>{
-  latestFoodRiderDocs=s.docs;setFoodCount("foodRiderCount",s.docs);renderFoodProfiles(s.docs,"foodRiders","foodRiderProfiles","rider");
- },e=>{$("foodRiders").textContent="Food Rider data load হয়নি: "+e.code;});
- stopFoodOrders=onSnapshot(collection(db,"foodOrders"),s=>{
-  latestFoodOrderDocs=s.docs;const pending=s.docs.filter(x=>["pending","accepted","ready","rider_assigned","picked_up"].includes(x.data().status)).length;
-  $("foodOrderCount").textContent="মোট: "+s.size+" | চলমান: "+pending;renderFoodOrders();
- },e=>{$("foodOrders").textContent="Food Order load হয়নি: "+e.code;});
- stopMerchantWallets=onSnapshot(collection(db,"merchantWallets"),s=>{
-  latestMerchantWalletDocs=s.docs;renderFoodWalletReport();
- },e=>console.error("Merchant wallets:",e));
- stopFoodRiderWallets=onSnapshot(collection(db,"foodRiderWallets"),s=>{
-  latestFoodRiderWalletDocs=s.docs;renderFoodWalletReport();
- },e=>console.error("Food rider wallets:",e));
- stopFoodLedger=onSnapshot(collection(db,"foodWalletTransactions"),s=>{
-  latestFoodLedgerDocs=s.docs;renderFoodWalletReport();
- },e=>{$("foodWalletLedger").textContent="Ledger load হয়নি: "+e.code;});
+function loadFoodDeliveryAdmin({food=false,foodRider=false,finance=false}={}){
+ if(food){
+  stopFoodCustomers=onSnapshot(collection(db,"foodCustomerProfiles"),s=>{
+   latestFoodCustomerDocs=s.docs;$("foodCustomerCount").textContent="মোট: "+s.size;renderFoodCustomers();
+  },e=>{$("foodCustomers").textContent="Customer data load হয়নি: "+e.code;});
+  stopMerchants=onSnapshot(collection(db,"merchantProfiles"),s=>{
+   latestMerchantDocs=s.docs;setFoodCount("merchantCount",s.docs);renderFoodProfiles(s.docs,"foodMerchants","merchantProfiles","merchant");
+  },e=>{$("foodMerchants").textContent="Merchant data load হয়নি: "+e.code;});
+ }
+ if(foodRider){
+  stopFoodRiders=onSnapshot(collection(db,"foodRiderProfiles"),s=>{
+   latestFoodRiderDocs=s.docs;setFoodCount("foodRiderCount",s.docs);renderFoodProfiles(s.docs,"foodRiders","foodRiderProfiles","rider");
+  },e=>{$("foodRiders").textContent="Food Rider data load হয়নি: "+e.code;});
+ }
+ if(food||foodRider){
+  stopFoodOrders=onSnapshot(collection(db,"foodOrders"),s=>{
+   latestFoodOrderDocs=s.docs;const pending=s.docs.filter(x=>["pending","accepted","ready","rider_assigned","picked_up"].includes(x.data().status)).length;
+   $("foodOrderCount").textContent="মোট: "+s.size+" | চলমান: "+pending;renderFoodOrders();
+  },e=>{$("foodOrders").textContent="Food Order load হয়নি: "+e.code;});
+ }
+ if(finance){
+  stopMerchantWallets=onSnapshot(collection(db,"merchantWallets"),s=>{
+   latestMerchantWalletDocs=s.docs;renderFoodWalletReport();
+  },e=>console.error("Merchant wallets:",e));
+  stopFoodRiderWallets=onSnapshot(collection(db,"foodRiderWallets"),s=>{
+   latestFoodRiderWalletDocs=s.docs;renderFoodWalletReport();
+  },e=>console.error("Food rider wallets:",e));
+  stopFoodLedger=onSnapshot(collection(db,"foodWalletTransactions"),s=>{
+   latestFoodLedgerDocs=s.docs;renderFoodWalletReport();
+  },e=>{$("foodWalletLedger").textContent="Ledger load হয়নি: "+e.code;});
+ }
+}
+
+// FINANCE: load only approved drivers and completed rides for payment calculations.
+function loadFinanceRideData(){
+ stopFinanceApplications=onSnapshot(query(collection(db,"driverApplications"),where("status","==","approved")),s=>{
+  latestApplicationDocs=s.docs;renderPaymentManagement();
+ },e=>console.error("Finance driver list:",e));
+ stopFinanceBookings=onSnapshot(query(collection(db,"rideBookings"),where("status","==","completed")),s=>{
+  latestBookingDocs=s.docs;renderPaymentManagement();
+ },e=>console.error("Finance completed rides:",e));
 }
 
 // LOGOUT
