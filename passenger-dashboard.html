@@ -457,7 +457,7 @@ function calculateFare(){
 function statusText(status){
 
  const statuses={
-  pending:"Pending — Admin-এর অনুমোদনের অপেক্ষায়",
+  pending:"Pending — কাছাকাছি চালক খোঁজা হচ্ছে",
   accepted:"Accepted — Ride গ্রহণ করা হয়েছে",
   rejected:"Rejected — Ride বাতিল করা হয়েছে",
   completed:"Completed — যাত্রা সম্পন্ন হয়েছে",
@@ -711,11 +711,17 @@ document.getElementById("calculateBtn")
 
   fareBox.textContent="৳"+result.total;
 
+  const distanceFare=result.distance*result.rate;
+  const beforeSurge=Math.max(ridePricingConfig.minimumFare,result.base+distanceFare);
+  const surgeFactor=ridePricingConfig.surgeEnabled?ridePricingConfig.surgeMultiplier:1;
   fareDetails.textContent=
-   "মূল ভাড়া ৳"+result.base+
-   " + দূরত্বভাড়া ৳"+
-   Math.round(result.distance*(result.vehicle==="bike"?12:20))+
-   " ("+result.distance+" কিমি)";
+   "Base ৳"+result.base+
+   " + Distance ৳"+Math.round(distanceFare)+
+   " ("+result.distance+" কিমি × ৳"+result.rate+"/কিমি)"+
+   (beforeSurge===ridePricingConfig.minimumFare && result.base+distanceFare<ridePricingConfig.minimumFare
+    ?" — Minimum Fare প্রযোজ্য":"")+
+   (surgeFactor>1?" × Surge "+surgeFactor+" = ":" = ")+
+   "৳"+result.total;
 
   bookingMessage.textContent="";
 
