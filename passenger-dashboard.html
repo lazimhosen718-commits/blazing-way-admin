@@ -173,6 +173,15 @@ button{border-radius:14px}
 .bottom-nav button span{display:block;font-size:22px;margin-bottom:3px}
 .bottom-nav button.active{color:#e33b3b;font-weight:bold}
 @media(min-width:600px){main{padding-left:24px;padding-right:24px}.services-grid{grid-template-columns:repeat(3,1fr)}}
+
+.panel-card{display:none}.panel-card.active{display:block}
+.offer-card{border:1px solid #e8edf1;border-radius:16px;padding:15px;margin:10px 0;background:#fff}
+.offer-card h3{margin:0 0 8px}.offer-code{display:inline-block;background:#fff0f0;color:#d83232;padding:5px 9px;border-radius:8px;font-weight:bold}
+.inbox-message{border:1px solid #e8edf1;border-radius:14px;padding:13px;margin:10px 0;background:#fff}
+.inbox-message.unread{border-left:4px solid #e33b3b;background:#fffafa}
+.inbox-message .meta{font-size:12px;color:#77828a;margin-top:8px}
+#customerMessageInput{width:100%;min-height:95px;border:1px solid #e5e8eb;border-radius:14px;padding:12px;font:inherit}
+
 </style>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin=""/>
 <style>
@@ -323,6 +332,22 @@ button{border-radius:14px}
 <div id="myBookings">তথ্য লোড হচ্ছে...</div>
 </div>
 
+
+<section class="card panel-card" id="offersPanel">
+ <h2 class="section-heading">🎁 Offers & Rewards</h2>
+ <p class="small">BLAZING-WAY-এর চলমান অফার ও ডিসকাউন্ট এখানে পাবেন।</p>
+ <div id="offersList">অফার লোড হচ্ছে...</div>
+</section>
+<section class="card panel-card" id="inboxPanel">
+ <h2 class="section-heading">✉️ Inbox</h2>
+ <p class="small">BLAZING-WAY-এর বার্তা ও আপনার Support Message এখানে থাকবে।</p>
+ <div id="inboxList">বার্তা লোড হচ্ছে...</div>
+ <h3>Support-এ বার্তা পাঠান</h3>
+ <textarea id="customerMessageInput" maxlength="1000" placeholder="আপনার সমস্যা বা প্রশ্ন লিখুন..."></textarea>
+ <button type="button" id="sendCustomerMessageBtn">বার্তা পাঠান</button>
+ <p id="customerMessageStatus" class="small"></p>
+</section>
+
 <div class="card">
 <h3>ℹ️ BLAZING-WAY</h3>
 <p class="small">
@@ -361,7 +386,8 @@ import {
  query,
  where,
  getDocs,
- onSnapshot
+ onSnapshot,
+ updateDoc
 } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-firestore.js";
 
 const app=initializeApp({
@@ -416,7 +442,76 @@ document.getElementById("foodSearchHome").addEventListener("input",e=>{const q=e
 document.querySelectorAll("[data-food-filter]").forEach(b=>b.addEventListener("click",()=>{document.querySelector('[data-service="food"]').click();document.getElementById("foodSearchHome").value=b.dataset.foodFilter;loadFoodMenu().then(()=>{const q=b.dataset.foodFilter.toLowerCase();document.querySelectorAll("#foodMenuList .booking-item").forEach(el=>el.style.display=el.textContent.toLowerCase().includes(q)?"":"none");});}));
 document.getElementById("saveHomeBtn").onclick=()=>{const v=prompt("আপনার Home ঠিকানা লিখুন:");if(v){document.getElementById("pickup").value=v;document.getElementById("saveHomeBtn").textContent="Home: "+v;}};
 document.getElementById("saveWorkBtn").onclick=()=>{const v=prompt("আপনার Work ঠিকানা লিখুন:");if(v){document.getElementById("pickup").value=v;document.getElementById("saveWorkBtn").textContent="Work: "+v;}};
-document.querySelectorAll(".bottom-nav button").forEach(b=>b.addEventListener("click",()=>{document.querySelectorAll(".bottom-nav button").forEach(x=>x.classList.remove("active"));b.classList.add("active");const t=b.dataset.tab;if(t==="home")document.getElementById("homeIntro").scrollIntoView({behavior:"smooth"});else if(t==="activity")document.getElementById("myBookings").closest(".card").scrollIntoView({behavior:"smooth"});else if(t==="offers")alert("Offers শিগগিরই চালু হবে।");else if(t==="inbox")alert("Inbox শিগগিরই চালু হবে।");}));
+function openCustomerTab(tab){
+ document.querySelectorAll(".bottom-nav button").forEach(x=>x.classList.toggle("active",x.dataset.tab===tab));
+ document.getElementById("offersPanel").classList.toggle("active",tab==="offers");
+ document.getElementById("inboxPanel").classList.toggle("active",tab==="inbox");
+ if(tab==="home"){document.getElementById("offersPanel").classList.remove("active");document.getElementById("inboxPanel").classList.remove("active");document.getElementById("homeIntro").scrollIntoView({behavior:"smooth"});}
+ else if(tab==="activity"){document.getElementById("offersPanel").classList.remove("active");document.getElementById("inboxPanel").classList.remove("active");document.getElementById("myBookings").closest(".card").scrollIntoView({behavior:"smooth"});}
+ else if(tab==="offers")document.getElementById("offersPanel").scrollIntoView({behavior:"smooth"});
+ else if(tab==="inbox")document.getElementById("inboxPanel").scrollIntoView({behavior:"smooth"});
+}
+document.querySelectorAll(".bottom-nav button").forEach(b=>b.addEventListener("click",()=>openCustomerTab(b.dataset.tab)));
+document.querySelector('[data-service="offers"]').addEventListener("click",()=>openCustomerTab("offers"));
+
+
+let unsubscribeOffers=null;
+let unsubscribeInbox=null;
+function startOffersListener(){
+ if(unsubscribeOffers)unsubscribeOffers();
+ const list=document.getElementById("offersList");
+ list.textContent="অফার লোড হচ্ছে...";
+ const q=query(collection(db,"platformOffers"),where("active","==",true));
+ unsubscribeOffers=onSnapshot(q,snap=>{
+  list.innerHTML="";
+  const now=Date.now();
+  const docs=snap.docs.map(d=>({id:d.id,...d.data()}))
+   .filter(o=>(!o.startAt?.toMillis||o.startAt.toMillis()<=now)&&(!o.endAt?.toMillis||o.endAt.toMillis()>=now))
+   .sort((a,b)=>(b.publishedAt?.toMillis?.()||0)-(a.publishedAt?.toMillis?.()||0));
+  if(!docs.length){list.textContent="এখনো কোনো চলমান অফার প্রকাশ করা হয়নি। নতুন অফার এলে এখানে দেখা যাবে।";return;}
+  docs.forEach(o=>{
+   const card=document.createElement("article");card.className="offer-card";
+   const title=document.createElement("h3");title.textContent=o.title||"BLAZING-WAY Offer";card.appendChild(title);
+   const desc=document.createElement("p");desc.textContent=o.description||"";card.appendChild(desc);
+   if(o.discount){const d=document.createElement("p");d.className="offer-code";d.textContent=o.discount;card.appendChild(d);}
+   if(o.code){const code=document.createElement("p");code.textContent="Promo Code: "+o.code;card.appendChild(code);}
+   if(o.endAt?.toDate){const end=document.createElement("p");end.className="small";end.textContent="শেষ তারিখ: "+o.endAt.toDate().toLocaleDateString("bn-BD");card.appendChild(end);}
+   list.appendChild(card);
+  });
+ },err=>{console.error(err);list.textContent="অফার লোড করা যায়নি। Firestore Rules প্রকাশ হয়েছে কি না দেখুন।";});
+}
+function startInboxListener(uid){
+ if(unsubscribeInbox)unsubscribeInbox();
+ const list=document.getElementById("inboxList");
+ list.textContent="Inbox লোড হচ্ছে...";
+ const q=query(collection(db,"customerInbox",uid,"messages"));
+ unsubscribeInbox=onSnapshot(q,async snap=>{
+  list.innerHTML="";
+  const docs=snap.docs.map(d=>({id:d.id,ref:d.ref,...d.data()}))
+   .sort((a,b)=>(b.createdAt?.toMillis?.()||0)-(a.createdAt?.toMillis?.()||0));
+  if(!docs.length){list.textContent="আপনার Inbox এখন খালি। Support-এ বার্তা পাঠাতে নিচে লিখুন।";return;}
+  for(const m of docs){
+   const card=document.createElement("article");card.className="inbox-message"+(m.read===false?" unread":"");
+   const title=document.createElement("strong");title.textContent=m.senderRole==="admin"?"BLAZING-WAY Support":"আপনার বার্তা";card.appendChild(title);
+   const body=document.createElement("p");body.textContent=m.body||"";card.appendChild(body);
+   const meta=document.createElement("div");meta.className="meta";meta.textContent=m.createdAt?.toDate?m.createdAt.toDate().toLocaleString("bn-BD"):"নতুন";card.appendChild(meta);
+   list.appendChild(card);
+   if(m.senderRole==="admin"&&m.read===false){try{await updateDoc(m.ref,{read:true});}catch(e){console.warn("Inbox read marker update failed",e);}}
+  }
+ },err=>{console.error(err);list.textContent="Inbox লোড করা যায়নি। Firestore Rules প্রকাশ হয়েছে কি না দেখুন।";});
+}
+document.getElementById("sendCustomerMessageBtn").addEventListener("click",async()=>{
+ const user=auth.currentUser, input=document.getElementById("customerMessageInput"), status=document.getElementById("customerMessageStatus");
+ const body=input.value.trim();
+ if(!user){status.textContent="প্রথমে লগইন করুন।";return;}
+ if(body.length<2){status.textContent="কমপক্ষে ২ অক্ষরের বার্তা লিখুন।";return;}
+ const btn=document.getElementById("sendCustomerMessageBtn");btn.disabled=true;status.textContent="বার্তা পাঠানো হচ্ছে...";
+ try{
+  await addDoc(collection(db,"customerInbox",user.uid,"messages"),{senderUid:user.uid,senderRole:"customer",body,read:false,createdAt:serverTimestamp()});
+  input.value="";status.textContent="আপনার বার্তা Support Inbox-এ পাঠানো হয়েছে।";
+ }catch(e){console.error(e);status.textContent="বার্তা পাঠানো যায়নি। Firestore Rules প্রকাশ হয়েছে কি না দেখুন।";}
+ finally{btn.disabled=false;}
+});
 
 let ridePricingConfig={bikeBaseFare:30,bikePerKm:12,carBaseFare:60,carPerKm:20,minimumFare:30,surgeEnabled:false,surgeMultiplier:1};
 onSnapshot(doc(db,"platformSettings","rideOperations"),snapshot=>{
@@ -816,6 +911,9 @@ onAuthStateChanged(auth,async(user)=>{
   bookingBtn.disabled=false;
 
   loadMyBookings(user.uid);
+  startOffersListener();
+  startInboxListener(user.uid);
+
 
  }catch(error){
 
