@@ -149,7 +149,10 @@ exports.completeRideWithOtp = onCall(async (request) => {
 
   await db.runTransaction(async (tx) => {
     const settingsRef = db.collection("platformSettings").doc("rideCommission");
-    const [snap, settingsSnap] = await Promise.all([tx.get(rideRef), tx.get(settingsRef)]);
+    const operationsRef = db.collection("platformSettings").doc("rideOperations");
+    const [snap, settingsSnap, operationsSnap] = await Promise.all([
+      tx.get(rideRef), tx.get(settingsRef), tx.get(operationsRef)
+    ]);
     if (!snap.exists) throw new HttpsError("not-found", "Ride পাওয়া যায়নি।");
     const ride = snap.data();
 
@@ -165,11 +168,23 @@ exports.completeRideWithOtp = onCall(async (request) => {
     }
 
     const vehicle = ride.vehicleType;
-    const baseFare = vehicle === "bike" ? 30 : vehicle === "car" ? 60 : null;
-    const perKm = vehicle === "bike" ? 12 : vehicle === "car" ? 20 : null;
-    if (baseFare === null) throw new HttpsError("failed-precondition", "অজানা vehicleType।");
-
-    const actualFare = money(Math.min(estimatedFare, baseFare + completedDistanceKm * perKm));
+    const operations = operationsSnap.exists ? operationsSnap.data() : {};
+    const baseFare = vehicle === "bike"
+      ? Number(operations.bikeBaseFare ?? 30)
+      : vehicle === "car" ? Number(operations.carBaseFare ?? 60) : null;
+    const perKm = vehicle === "bike"
+      ? Number(operations.bikePerKm ?? 12)
+      : vehicle === "car" ? Number(operations.carPerKm ?? 20) : null;
+    if (baseFare === null || !Number.isFinite(baseFare) || !Number.isFinite(perKm)) {
+      throw new HttpsError("failed-precondition", "Ride ভাড়ার সেটিংস সঠিক নয়।");
+    }
+    const minimumFare = Number(operations.minimumFare ?? 30);
+    const surgeMultiplier = operations.surgeEnabled === true ? Number(operations.surgeMultiplier ?? 1) : 1;
+    if (!Number.isFinite(minimumFare) || minimumFare < 0 || !Number.isFinite(surgeMultiplier) || surgeMultiplier < 1 || surgeMultiplier > 5) {
+      throw new HttpsError("failed-precondition", "Minimum Fare বা Surge সেটিংস সঠিক নয়।");
+    }
+    const calculatedActualFare = Math.max(minimumFare, baseFare + completedDistanceKm * perKm) * surgeMultiplier;
+    const actualFare = money(Math.min(estimatedFare, calculatedActualFare));
     const passengerRefund = money(Math.max(0, estimatedFare - actualFare));
     const configuredRates = settingsSnap.exists ? settingsSnap.data() : {};
     const commissionRate = Number(configuredRates[vehicle] ?? 0.01);
