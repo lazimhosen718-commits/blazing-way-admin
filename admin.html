@@ -97,9 +97,15 @@ button:disabled{opacity:.5;cursor:not-allowed}
 <p id="rideCount">লোড হচ্ছে...</p>
 </div>
 
-<div class="card">
-<h3>Commission</h3>
-<p>প্রতি Completed Ride-এ ১%</p>
+<div class="card" id="commissionSettings">
+<h3>Ride Commission Settings</h3>
+<p class="small">Bike ও Car-এর কমিশন আলাদাভাবে নির্ধারণ করুন। পরিবর্তন শুধু নতুন করে সম্পন্ন হওয়া Ride-এ কার্যকর হবে।</p>
+<div class="grid">
+ <div><label>Bike Commission (%)</label><input id="bikeCommissionRate" type="number" min="0" max="50" step="0.1" value="1"></div>
+ <div><label>Car Commission (%)</label><input id="carCommissionRate" type="number" min="0" max="50" step="0.1" value="1"></div>
+</div>
+<button id="saveCommissionRates" class="approveBtn">কমিশন সংরক্ষণ করুন</button>
+<p id="commissionSettingsMessage" class="small">বর্তমান হার: Bike ১% | Car ১%</p>
 <p id="commissionInfo">লোড হচ্ছে...</p>
 </div>
 
@@ -126,8 +132,7 @@ button:disabled{opacity:.5;cursor:not-allowed}
 <h2>💰 Driver Payment Management</h2>
 
 <p class="small">
-Completed Ride-এর ভাড়ার ৯৯% Driver-এর আয়।
-Admin-এর ১% কমিশন আলাদা।
+Driver-এর আয় = সম্পন্ন ভাড়া − প্রযোজ্য Ride কমিশন।
 </p>
 
 <div class="grid">
@@ -278,8 +283,7 @@ import {
  serverTimestamp,query,where,getDoc,addDoc,runTransaction
 } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-firestore.js";
 
-const COMMISSION_RATE=0.01;
-const DRIVER_RATE=0.99;
+let rideCommissionRates={bike:0.01,car:0.01};
 
 const app=initializeApp({
  apiKey:"AIzaSyBVzdXw-nO8ixDqxbGhTj3lbBX37XUMCr4",
@@ -309,6 +313,7 @@ let stopMerchantWallets=null;
 let stopFoodRiderWallets=null;
 let stopFoodLedger=null;
 let stopAdminAccounts=null;
+let stopCommissionSettings=null;
 let currentAdminRoles=[];
 let currentIsSuperAdmin=false;
 
@@ -335,6 +340,47 @@ function money(value){
 function safeText(value){
  return String(value??"");
 }
+
+function getRideCommissionRate(vehicleType){
+ return Number(rideCommissionRates[vehicleType]??0.01);
+}
+
+function loadRideCommissionSettings(){
+ if(stopCommissionSettings)stopCommissionSettings();
+ stopCommissionSettings=onSnapshot(doc(db,"platformSettings","rideCommission"),snapshot=>{
+  const rates=snapshot.exists()?snapshot.data():{};
+  rideCommissionRates={
+   bike:Number.isFinite(Number(rates.bike))?Number(rates.bike):0.01,
+   car:Number.isFinite(Number(rates.car))?Number(rates.car):0.01
+  };
+  $("bikeCommissionRate").value=(rideCommissionRates.bike*100).toString();
+  $("carCommissionRate").value=(rideCommissionRates.car*100).toString();
+  $("commissionSettingsMessage").textContent="বর্তমান হার: Bike "+(rideCommissionRates.bike*100)+"% | Car "+(rideCommissionRates.car*100)+"%";
+  if(latestBookingDocs.length)renderRideBookings(latestBookingDocs);
+  renderPaymentManagement();
+ },error=>{
+  console.error(error);
+  $("commissionSettingsMessage").textContent="কমিশন সেটিংস পড়া যায়নি: "+error.code;
+ });
+}
+
+$("saveCommissionRates").onclick=async()=>{
+ const bikePercent=Number($("bikeCommissionRate").value);
+ const carPercent=Number($("carCommissionRate").value);
+ const button=$("saveCommissionRates");
+ if(!Number.isFinite(bikePercent)||!Number.isFinite(carPercent)||bikePercent<0||carPercent<0||bikePercent>50||carPercent>50){
+  $("commissionSettingsMessage").textContent="কমিশন ০% থেকে ৫০%-এর মধ্যে দিন।";return;
+ }
+ button.disabled=true;
+ $("commissionSettingsMessage").textContent="সংরক্ষণ হচ্ছে...";
+ try{
+  await httpsCallable(functions,"updateRideCommissionRates")({bike:bikePercent/100,car:carPercent/100});
+  $("commissionSettingsMessage").textContent="নতুন কমিশন হার সংরক্ষিত হয়েছে।";
+ }catch(error){
+  console.error(error);
+  $("commissionSettingsMessage").textContent="সংরক্ষণ হয়নি: "+(error.message||error.code);
+ }finally{button.disabled=false;}
+};
 
 // LOGIN
 $("loginBtn").onclick=async()=>{
@@ -425,7 +471,7 @@ function applyAdminRoleVisibility(){
  ["foodRiders"].forEach(id=>hideAdminCardById(id,foodRider));
  ["foodOrders"].forEach(id=>hideAdminCardById(id,food||foodRider));
  ["depositRequests"].forEach(id=>hideAdminCardById(id,finance));
- ["adminAccountManagement"].forEach(id=>hideAdminCardById(id,currentIsSuperAdmin));
+ ["adminAccountManagement","commissionSettings"].forEach(id=>hideAdminCardById(id,currentIsSuperAdmin));
  // Ride payment and Finance-only controls are not exposed to unrelated service admins.
  const headings=[...document.querySelectorAll("h2")];
  headings.forEach(h=>{
@@ -491,7 +537,7 @@ onAuthStateChanged(auth,async user=>{
    if(currentIsSuperAdmin || currentAdminRoles.includes("food") || currentAdminRoles.includes("food_rider")){
     loadFoodDeliveryAdmin();
    }
-   if(currentIsSuperAdmin)loadAdminAccounts();
+   if(currentIsSuperAdmin){loadAdminAccounts();loadRideCommissionSettings();}
   }else{
    await signOut(auth);
    $("login").style.display="block";
@@ -753,12 +799,12 @@ function renderRideBookings(docs){
 
  completed.forEach(item=>{
   const d=item.data();
-  commission+=Number(d.estimatedFare||0)*COMMISSION_RATE;
+  commission+=Number(d.platformCommission??(Number(d.actualFare??d.estimatedFare??0)*getRideCommissionRate(d.vehicleType)));
  });
 
  $("commissionInfo").textContent=
   "Completed Ride: "+completed.length+
-  " | মোট ১% কমিশন: ৳"+money(commission);
+  " | মোট কমিশন: ৳"+money(commission);
 
  if(!total){
   $("rideBookings").textContent="এখনো কোনো Booking নেই।";
@@ -816,10 +862,10 @@ function renderRideBookings(docs){
 
   if(d.status==="completed"){
 
-   const amount=Number(d.estimatedFare||0)*COMMISSION_RATE;
+   const amount=Number(d.platformCommission??(Number(d.actualFare??d.estimatedFare??0)*getRideCommissionRate(d.vehicleType)));
    const box=document.createElement("div");
    box.className="commissionBox";
-   box.textContent="এই Ride-এর ১% কমিশন: ৳"+money(amount);
+   box.textContent="এই Ride-এর কমিশন: ৳"+money(amount);
    card.appendChild(box);
   }
 
@@ -894,8 +940,8 @@ function renderRideBookings(docs){
     if(!confirm(
      "এই Ride কি সত্যিই সম্পন্ন হয়েছে?\n\n"+
      "ভাড়া: ৳"+(d.estimatedFare||0)+
-     "\nAdmin-এর ১% কমিশন: ৳"+
-     money(Number(d.estimatedFare||0)*COMMISSION_RATE)
+     "\nBLAZING-WAY-এর কমিশন: ৳"+
+     Number(d.platformCommission??(Number(d.actualFare??d.estimatedFare??0)*getRideCommissionRate(d.vehicleType)))
     ))return;
 
     complete.disabled=true;
@@ -906,7 +952,7 @@ function renderRideBookings(docs){
       status:"completed"
      });
 
-     alert("Ride Completed হয়েছে। ১% কমিশন হিসাবে যুক্ত হয়েছে।");
+     alert("Ride Completed হয়েছে। চূড়ান্ত কমিশন settlement-এর সময় হিসাব হবে।");
 
     }catch(error){
      console.error(error);
@@ -1073,9 +1119,10 @@ function getDriverPaymentData(){
    };
   }
 
-  const fare=Number(d.estimatedFare||0);
+  const fare=Number(d.actualFare??d.estimatedFare??0);
+  const driverEarnings=Number(d.driverEarnings??(fare*(1-getRideCommissionRate(d.vehicleType))));
 
-  drivers[d.driverId].earnings+=fare*DRIVER_RATE;
+  drivers[d.driverId].earnings+=driverEarnings;
   drivers[d.driverId].rides++;
  });
 
