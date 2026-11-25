@@ -596,7 +596,7 @@ service cloud.firestore {
     // CUSTOMER OFFERS: published offers are visible to signed-in customers.
     // Only Super Admin can publish, edit, or remove offers.
     match /platformOffers/{offerId} {
-      allow read: if signedIn() && resource.data.active == true;
+      allow read: if isSuperAdmin() || (signedIn() && resource.data.active == true);
       allow create, update, delete: if isSuperAdmin();
     }
 
