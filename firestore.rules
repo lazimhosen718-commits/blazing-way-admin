@@ -544,7 +544,7 @@ service cloud.firestore {
     // assigned approved rider, and Admin. Writes are intentionally closed
     // until the production order schema and server-side fee transaction exist.
     match /foodOrders/{orderId} {
-      allow read: if isFoodAdmin()
+      allow read: if (isFoodAdmin() || isFoodRiderAdmin())
         || (signedIn() && resource.data.customerId == request.auth.uid)
         || (signedIn() && resource.data.merchantId == request.auth.uid && isApprovedMerchant(request.auth.uid))
         || (signedIn() && resource.data.assignedRiderId == request.auth.uid && isApprovedFoodRider(request.auth.uid))
@@ -563,7 +563,7 @@ service cloud.firestore {
     }
 
     match /foodOrderEvents/{eventId} {
-      allow read: if isFoodAdmin()
+      allow read: if (isFoodAdmin() || isFoodRiderAdmin())
         || (signedIn() && resource.data.actorUid == request.auth.uid);
       allow create, update, delete: if false;
     }
