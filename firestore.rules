@@ -112,18 +112,24 @@ service cloud.firestore {
 
       allow create: if isApprovedDriver(driverId)
         && request.resource.data.keys().hasAll(['uid', 'online', 'updatedAt'])
-        && request.resource.data.keys().hasOnly(['uid', 'online', 'updatedAt'])
+        && request.resource.data.keys().hasOnly(['uid', 'online', 'updatedAt', 'lat', 'lng', 'accuracy'])
         && request.resource.data.uid == driverId
         && request.resource.data.online is bool
+        && (!('lat' in request.resource.data) || (request.resource.data.lat is number && request.resource.data.lat >= -90 && request.resource.data.lat <= 90))
+        && (!('lng' in request.resource.data) || (request.resource.data.lng is number && request.resource.data.lng >= -180 && request.resource.data.lng <= 180))
+        && (!('accuracy' in request.resource.data) || (request.resource.data.accuracy is number && request.resource.data.accuracy >= 0))
         && request.resource.data.updatedAt == request.time;
 
       allow update: if (
           isApprovedDriver(driverId)
           || (isRideAdmin() && request.resource.data.online == false)
         )
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['online', 'updatedAt'])
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['online', 'updatedAt', 'lat', 'lng', 'accuracy'])
         && request.resource.data.uid == resource.data.uid
         && request.resource.data.online is bool
+        && (!('lat' in request.resource.data) || (request.resource.data.lat is number && request.resource.data.lat >= -90 && request.resource.data.lat <= 90))
+        && (!('lng' in request.resource.data) || (request.resource.data.lng is number && request.resource.data.lng >= -180 && request.resource.data.lng <= 180))
+        && (!('accuracy' in request.resource.data) || (request.resource.data.accuracy is number && request.resource.data.accuracy >= 0))
         && request.resource.data.updatedAt == request.time;
 
       allow delete: if false;
