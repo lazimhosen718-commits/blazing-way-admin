@@ -326,6 +326,16 @@ const myBookings=document.getElementById("myBookings");
 
 let passengerReady=false;
 let unsubscribeBookings=null;
+let ridePricingConfig={bikeBaseFare:30,bikePerKm:12,carBaseFare:60,carPerKm:20,minimumFare:30,surgeEnabled:false,surgeMultiplier:1};
+onSnapshot(doc(db,"platformSettings","rideOperations"),snapshot=>{
+ const s=snapshot.exists()?snapshot.data():{};
+ ridePricingConfig={
+  bikeBaseFare:Number(s.bikeBaseFare??30),bikePerKm:Number(s.bikePerKm??12),
+  carBaseFare:Number(s.carBaseFare??60),carPerKm:Number(s.carPerKm??20),
+  minimumFare:Number(s.minimumFare??30),surgeEnabled:s.surgeEnabled===true,
+  surgeMultiplier:Number(s.surgeMultiplier??1)
+ };
+},error=>console.warn("Ride pricing settings unavailable; using default fare settings.",error));
 
 
 const activeTrackers=new Map();
@@ -433,11 +443,12 @@ function calculateFare(){
   throw new Error("দূরত্ব ০-এর বেশি এবং সর্বোচ্চ ২০০ কিলোমিটার হতে হবে।");
  }
 
- const base=vehicle==="bike"?30:60;
- const rate=vehicle==="bike"?12:20;
- const total=Math.round(base+(distance*rate));
+ const base=vehicle==="bike"?ridePricingConfig.bikeBaseFare:ridePricingConfig.carBaseFare;
+ const rate=vehicle==="bike"?ridePricingConfig.bikePerKm:ridePricingConfig.carPerKm;
+ const raw=Math.max(ridePricingConfig.minimumFare,base+(distance*rate));
+ const total=Math.round(raw*(ridePricingConfig.surgeEnabled?ridePricingConfig.surgeMultiplier:1));
 
- return {vehicle,distance,total,base};
+ return {vehicle,distance,total,base,rate};
 }
 
 // STATUS TRANSLATION
