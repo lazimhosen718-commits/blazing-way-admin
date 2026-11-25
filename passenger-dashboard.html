@@ -166,6 +166,8 @@ button:disabled{opacity:.6;cursor:not-allowed}
 <h2>স্বাগতম!</h2>
 <p id="passengerName">তথ্য লোড হচ্ছে...</p>
 <p id="passengerEmail"></p>
+<div id="gpsStatus" class="notice" style="margin:12px 0">📍 আপনার বর্তমান অবস্থান নেওয়ার জন্য GPS অনুমতি চাওয়া হবে...</div>
+<button type="button" id="gpsRetryBtn" style="background:#087443">📍 GPS আবার চালু করুন</button>
 <button class="logout" id="logoutBtn">Logout</button>
 <a href="passenger-wallet.html" style="display:block;text-align:center;background:#087443;color:white;text-decoration:none;padding:13px;border-radius:7px;margin-top:10px">💳 আমার Wallet খুলুন</a>
 </div>
@@ -340,6 +342,27 @@ const myBookings=document.getElementById("myBookings");
 
 let passengerReady=false;
 let unsubscribeBookings=null;
+let currentGps=null;
+let gpsRequested=false;
+function requestAppLocation(){
+ if(gpsRequested)return;
+ gpsRequested=true;
+ const status=document.getElementById("gpsStatus");
+ if(!navigator.geolocation){status.textContent="এই ব্রাউজারে GPS সুবিধা পাওয়া যাচ্ছে না।";return;}
+ status.textContent="📍 আপনার অবস্থানের অনুমতি দিন...";
+ navigator.geolocation.getCurrentPosition(pos=>{
+  currentGps={lat:pos.coords.latitude,lng:pos.coords.longitude};
+  status.textContent="✅ GPS চালু হয়েছে। আপনার বর্তমান অবস্থান পাওয়া গেছে।";
+ },err=>{
+  currentGps=null;
+  status.textContent=err.code===1
+   ?"GPS অনুমতি দেওয়া হয়নি। Ride বুকিংয়ের সময় Pickup Location লিখতে পারবেন।"
+   :"বর্তমান GPS পাওয়া যায়নি। ফোনের Location চালু করে আবার চেষ্টা করুন।";
+ },{enableHighAccuracy:true,maximumAge:30000,timeout:15000});
+}
+document.getElementById("gpsRetryBtn").addEventListener("click",()=>{
+ gpsRequested=false;requestAppLocation();
+});
 let ridePricingConfig={bikeBaseFare:30,bikePerKm:12,carBaseFare:60,carPerKm:20,minimumFare:30,surgeEnabled:false,surgeMultiplier:1};
 onSnapshot(doc(db,"platformSettings","rideOperations"),snapshot=>{
  const s=snapshot.exists()?snapshot.data():{};
@@ -725,6 +748,7 @@ onAuthStateChanged(auth,async(user)=>{
   }
 
   const profile=profileSnap.data();
+  requestAppLocation();
   const foodProfileRef=doc(db,"foodCustomerProfiles",user.uid);
   const foodProfileSnap=await getDoc(foodProfileRef);
   if(!foodProfileSnap.exists()) await setDoc(foodProfileRef,{uid:user.uid,fullName:profile.fullName||user.displayName||"Customer",email:user.email,phone:profile.phone||"",role:"food_customer",createdAt:serverTimestamp()});
@@ -835,10 +859,8 @@ bookingBtn.addEventListener("click",async()=>{
 
  try{
 
-  let pickupGps = null;
-  const useCurrentGps = navigator.geolocation
-   && window.confirm("আপনার লেখা Pickup স্থানটি কি আপনার বর্তমান অবস্থান? বর্তমান GPS-কে Pickup হিসেবে ব্যবহার করতে OK চাপুন। অন্য স্থান হলে Cancel চাপুন।");
-  if (useCurrentGps) {
+  let pickupGps = currentGps;
+  if (!pickupGps && navigator.geolocation && window.confirm("বর্তমান GPS-কে Pickup হিসেবে ব্যবহার করতে চান? OK চাপুন।")) {
    try {
     pickupGps = await new Promise((resolve, reject) => {
      navigator.geolocation.getCurrentPosition(
@@ -847,6 +869,7 @@ bookingBtn.addEventListener("click",async()=>{
       {enableHighAccuracy:true,maximumAge:30000,timeout:10000}
      );
     });
+    currentGps=pickupGps;
    } catch (gpsError) {
     console.warn("Pickup GPS unavailable; dispatch will use fallback mode.",gpsError);
    }
