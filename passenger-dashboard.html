@@ -323,6 +323,32 @@ button{border-radius:14px}
  <button type="button" id="foodPlaceOrderBtn">অর্ডার Confirm করুন</button><p id="foodMessage" class="small"></p>
  <h3>আমার Food Orders</h3><button type="button" id="foodOrdersRefresh" style="background:#475569">অর্ডার Refresh</button><div id="foodOrdersList">অর্ডার লোড হচ্ছে...</div>
 </div>
+
+<!-- PARCEL & BUSINESS DELIVERY -->
+<section class="card" id="parcelSection" style="display:none">
+ <h2>📦 Parcel Delivery</h2>
+ <p class="small">ব্যক্তিগত পার্সেল পাঠানোর বুকিং। Pickup ও Delivery তথ্য দিন।</p>
+ <button type="button" id="parcelBackBtn" style="background:#475569">Home-এ ফিরুন</button>
+ <label>Pickup Address</label><input id="parcelPickup" placeholder="যেখান থেকে পার্সেল নেওয়া হবে">
+ <label>Delivery Address</label><input id="parcelDrop" placeholder="যেখানে পৌঁছে দিতে হবে">
+ <label>প্রাপকের নাম</label><input id="parcelReceiver" placeholder="প্রাপকের নাম">
+ <label>প্রাপকের মোবাইল</label><input id="parcelReceiverPhone" type="tel" inputmode="numeric" placeholder="01XXXXXXXXX">
+ <label>পার্সেলের বিবরণ</label><input id="parcelDescription" maxlength="300" placeholder="যেমন: কাগজপত্র / ছোট প্যাকেট">
+ <button type="button" id="parcelBookBtn">Parcel বুক করুন</button><p id="parcelMessage" class="small"></p>
+ <h3>আমার Parcel Bookings</h3><div id="parcelOrdersList">লোড হচ্ছে...</div>
+ <hr>
+ <h2>🚚 Business Delivery</h2>
+ <p class="small">ব্যবসা প্রতিষ্ঠানের পণ্য ডেলিভারির আলাদা বুকিং। এটি Parcel order থেকে আলাদা থাকবে।</p>
+ <label>ব্যবসা প্রতিষ্ঠানের নাম</label><input id="businessName" placeholder="প্রতিষ্ঠানের নাম">
+ <label>যোগাযোগকারীর নাম</label><input id="businessContact" placeholder="আপনার নাম">
+ <label>মোবাইল নম্বর</label><input id="businessPhone" type="tel" inputmode="numeric" placeholder="01XXXXXXXXX">
+ <label>Pickup Address</label><input id="businessPickup" placeholder="পণ্য সংগ্রহের ঠিকানা">
+ <label>Delivery Address</label><input id="businessDrop" placeholder="পণ্য পৌঁছানোর ঠিকানা">
+ <label>পণ্যের বিবরণ</label><input id="businessDescription" maxlength="300" placeholder="পণ্যের বিবরণ">
+ <button type="button" id="businessBookBtn">Business Delivery বুক করুন</button><p id="businessMessage" class="small"></p>
+ <h3>আমার Business Delivery Bookings</h3><div id="businessOrdersList">লোড হচ্ছে...</div>
+</section>
+
 <!-- MY BOOKINGS -->
 <div class="card">
 <h2>🚕 আমার বুকিংসমূহ</h2>
@@ -578,6 +604,49 @@ function addPassengerLivePanel(booking,item){
  map.whenReady(()=>setTimeout(()=>map.invalidateSize(),250));
 }
 
+
+let parcelUnsub=null,businessUnsub=null;
+function parcelMsg(id,msg,ok=false){const el=document.getElementById(id);el.textContent=msg;el.style.color=ok?"#087443":"#b42318";}
+function renderDeliveryOrders(queryRef,boxId,label){
+ const box=document.getElementById(boxId);
+ return onSnapshot(queryRef,snap=>{
+  box.replaceChildren();
+  if(snap.empty){box.textContent="এখনো কোনো বুকিং নেই।";return;}
+  snap.forEach(d=>{const x=d.data(),item=document.createElement("div");item.className="booking-item";
+   const title=document.createElement("strong");title.textContent=label+" • "+(x.status||"pending");
+   const detail=document.createElement("p");detail.textContent=(x.pickupAddress||"")+" → "+(x.deliveryAddress||"");
+   const extra=document.createElement("p");extra.textContent=x.parcelDescription||x.productDescription||"";
+   item.append(title,detail,extra);box.append(item);
+  });
+ },err=>{box.textContent="বুকিং লোড হয়নি: "+err.code;});
+}
+async function submitParcelBooking(){
+ const user=auth.currentUser;if(!user){parcelMsg("parcelMessage","প্রথমে Customer Login করুন।");return;}
+ const pickup=document.getElementById("parcelPickup").value.trim(),drop=document.getElementById("parcelDrop").value.trim();
+ const receiver=document.getElementById("parcelReceiver").value.trim(),phone=document.getElementById("parcelReceiverPhone").value.trim(),description=document.getElementById("parcelDescription").value.trim();
+ if(pickup.length<4||drop.length<4||receiver.length<2||!/^01[3-9][0-9]{8}$/.test(phone)||description.length<2){parcelMsg("parcelMessage","সব তথ্য সঠিকভাবে পূরণ করুন।");return;}
+ const b=document.getElementById("parcelBookBtn");b.disabled=true;
+ try{
+  const profile=(await getDoc(doc(db,"passengerProfiles",user.uid))).data()||{};
+  const ref=await addDoc(collection(db,"parcelOrders"),{customerId:user.uid,customerName:profile.fullName||user.displayName||"Customer",customerPhone:profile.phone||"",pickupAddress:pickup,deliveryAddress:drop,receiverName:receiver,receiverPhone:phone,parcelDescription:description,status:"pending",assignedRiderId:null,createdAt:serverTimestamp()});
+  parcelMsg("parcelMessage","Parcel booking জমা হয়েছে। Booking ID: "+ref.id,true);
+  ["parcelPickup","parcelDrop","parcelReceiver","parcelReceiverPhone","parcelDescription"].forEach(id=>document.getElementById(id).value="");
+ }catch(e){parcelMsg("parcelMessage","বুকিং হয়নি: "+(e.code||e.message));}finally{b.disabled=false;}
+}
+async function submitBusinessBooking(){
+ const user=auth.currentUser;if(!user){parcelMsg("businessMessage","প্রথমে Customer Login করুন।");return;}
+ const business=document.getElementById("businessName").value.trim(),contact=document.getElementById("businessContact").value.trim(),phone=document.getElementById("businessPhone").value.trim(),pickup=document.getElementById("businessPickup").value.trim(),drop=document.getElementById("businessDrop").value.trim(),description=document.getElementById("businessDescription").value.trim();
+ if(business.length<2||contact.length<2||!/^01[3-9][0-9]{8}$/.test(phone)||pickup.length<4||drop.length<4||description.length<2){parcelMsg("businessMessage","সব তথ্য সঠিকভাবে পূরণ করুন।");return;}
+ const b=document.getElementById("businessBookBtn");b.disabled=true;
+ try{
+  const ref=await addDoc(collection(db,"businessDeliveryOrders"),{customerId:user.uid,businessName:business,contactName:contact,contactPhone:phone,pickupAddress:pickup,deliveryAddress:drop,productDescription:description,status:"pending",assignedRiderId:null,createdAt:serverTimestamp()});
+  parcelMsg("businessMessage","Business Delivery booking জমা হয়েছে। Booking ID: "+ref.id,true);
+ }catch(e){parcelMsg("businessMessage","বুকিং হয়নি: "+(e.code||e.message));}finally{b.disabled=false;}
+}
+document.getElementById("parcelBookBtn").addEventListener("click",submitParcelBooking);
+document.getElementById("businessBookBtn").addEventListener("click",submitBusinessBooking);
+document.getElementById("parcelBackBtn").addEventListener("click",()=>{document.getElementById("parcelSection").style.display="none";document.getElementById("homeIntro").scrollIntoView({behavior:"smooth"});});
+
 // SERVICE SELECTION
 document.querySelectorAll(".service").forEach(button=>{
 
@@ -590,7 +659,7 @@ document.querySelectorAll(".service").forEach(button=>{
 
   button.classList.add("active");
 
-  if(service==="bike"||service==="car"){
+  if(service==="bike"||service==="car"){\n   document.getElementById("parcelSection").style.display="none";document.getElementById("foodSection").style.display="none";document.getElementById("rideSection").style.display="block";
 
    document.getElementById("vehicle").value=service;
 
@@ -602,12 +671,12 @@ document.querySelectorAll(".service").forEach(button=>{
     "Bike Ride নির্বাচন করা হয়েছে।":
     "Private Car Ride নির্বাচন করা হয়েছে।";
 
-  }else if(service==="food"){
+  }else if(service==="food"){\n   document.getElementById("parcelSection").style.display="none";
    document.getElementById("rideSection").style.display="none";
    document.getElementById("foodSection").style.display="block";
    document.getElementById("foodSection").scrollIntoView({behavior:"smooth"});
    loadFoodMenu();loadFoodOrders();
-  }else if(service==="offers"){
+  }else if(service==="parcel"||service==="courier"){\n   document.getElementById("rideSection").style.display="none";document.getElementById("foodSection").style.display="none";document.getElementById("parcelSection").style.display="block";\n   document.getElementById("parcelSection").scrollIntoView({behavior:"smooth"});\n   if(auth.currentUser){if(parcelUnsub)parcelUnsub();if(businessUnsub)businessUnsub();parcelUnsub=renderDeliveryOrders(query(collection(db,"parcelOrders"),where("customerId","==",auth.currentUser.uid)),"parcelOrdersList","Parcel");businessUnsub=renderDeliveryOrders(query(collection(db,"businessDeliveryOrders"),where("customerId","==",auth.currentUser.uid)),"businessOrdersList","Business Delivery");}\n   document.getElementById("parcelSection").querySelector("h2").textContent=service==="parcel"?"📦 Parcel Delivery":"🚚 Business Delivery";\n  }else if(service==="offers"){
    openCustomerTab("offers");
   }else{
    const names={parcel:"Parcel",courier:"Courier",pay:"BLAZING-WAY Pay"};
