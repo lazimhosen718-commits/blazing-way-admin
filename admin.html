@@ -297,17 +297,17 @@ import {getFunctions,httpsCallable} from "https://www.gstatic.com/firebasejs/12.
 
 import {
  getAuth,onAuthStateChanged,signInWithEmailAndPassword,
- signOut,getIdTokenResult
+ createUserWithEmailAndPassword,signOut
 } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-auth.js";
 
 import {
- getFirestore,collection,onSnapshot,doc,updateDoc,
+ getFirestore,collection,onSnapshot,doc,updateDoc,setDoc,
  serverTimestamp,query,where,getDoc,addDoc,runTransaction
 } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-firestore.js";
 
 let rideCommissionRates={bike:0.01,car:0.01};
 
-const app=initializeApp({
+const firebaseConfig={
  apiKey:"AIzaSyBVzdXw-nO8ixDqxbGhTj3lbBX37XUMCr4",
  authDomain:"blazing-way.firebaseapp.com",
  projectId:"blazing-way",
@@ -315,11 +315,14 @@ const app=initializeApp({
  messagingSenderId:"100523779075",
  appId:"1:100523779075:web:732df54a1b0565f02e1a36",
  measurementId:"G-9V8GMD28ST"
-});
-
+};
+const app=initializeApp(firebaseConfig);
+const creatorApp=initializeApp(firebaseConfig,"adminCreator");
 const auth=getAuth(app);
+const creatorAuth=getAuth(creatorApp);
 const db=getFirestore(app);
 const functions=getFunctions(app,"asia-south1");
+const SUPER_ADMIN_UID="fINwRzYnqVUy6to1ZBvHzvACyqm1";
 const $=id=>document.getElementById(id);
 
 let stopApplications=null;
@@ -486,15 +489,29 @@ $("createAdminBtn").onclick=async()=>{
  $("adminCreateMessage").textContent="";
  if(name.length<2||!email||password.length<8){$("adminCreateMessage").textContent="নাম, Email এবং কমপক্ষে ৮ অক্ষরের Password দিন।";return;}
  button.disabled=true;
+ let createdUid=null;
  try{
-  const create= httpsCallable(functions,"createServiceAdmin");
-  const result=await create({displayName:name,email,password,role});
-  $("adminCreateMessage").textContent="Admin ID তৈরি হয়েছে: "+result.data.uid+" ("+role+")";
+  const credential=await createUserWithEmailAndPassword(creatorAuth,email,password);
+  createdUid=credential.user.uid;
+  await setDoc(doc(db,"adminAccounts",createdUid),{
+   uid:createdUid,email,displayName:name,role,roles:[role],
+   status:"active",createdBy:auth.currentUser.uid,createdAt:serverTimestamp()
+  });
+  await addDoc(collection(db,"adminAuditLogs"),{
+   actorUid:auth.currentUser.uid,action:"create_admin",targetUid:createdUid,
+   role,createdAt:serverTimestamp()
+  });
+  $("adminCreateMessage").textContent="Admin ID তৈরি হয়েছে: "+createdUid+" ("+role+")";
   $("newAdminName").value="";$("newAdminEmail").value="";$("newAdminPassword").value="";
  }catch(error){
   console.error(error);
-  $("adminCreateMessage").textContent="তৈরি হয়নি: "+(error.message||error.code);
- }finally{button.disabled=false;}
+  $("adminCreateMessage").textContent=createdUid
+   ?"Auth account তৈরি হয়েছে, কিন্তু Admin permission সংরক্ষণ হয়নি। Rules প্রকাশিত আছে কি না দেখুন। UID: "+createdUid
+   :"তৈরি হয়নি: "+(error.message||error.code);
+ }finally{
+  try{await signOut(creatorAuth);}catch(_){}
+  button.disabled=false;
+ }
 };
 function loadAdminAccounts(){
  stopAdminAccounts=onSnapshot(collection(db,"adminAccounts"),snapshot=>{
@@ -510,13 +527,33 @@ function loadAdminAccounts(){
      const option=document.createElement("option");option.value=role;option.textContent=role;option.selected=role===d.role;roleSelect.appendChild(option);
     });
     const change=document.createElement("button");change.textContent="Role পরিবর্তন";change.onclick=async()=>{
-     change.disabled=true;try{await httpsCallable(functions,"changeServiceAdminRole")({uid:item.id,role:roleSelect.value});alert("Admin Role পরিবর্তন হয়েছে।");}
-     catch(e){alert("Role পরিবর্তন হয়নি: "+e.message);}finally{change.disabled=false;}
+     change.disabled=true;
+     try{
+      const nextRole=roleSelect.value;
+      await updateDoc(doc(db,"adminAccounts",item.id),{
+       role:nextRole,roles:[nextRole],updatedBy:auth.currentUser.uid,updatedAt:serverTimestamp()
+      });
+      await addDoc(collection(db,"adminAuditLogs"),{
+       actorUid:auth.currentUser.uid,action:"change_admin_role",targetUid:item.id,
+       role:nextRole,createdAt:serverTimestamp()
+      });
+      alert("Admin Role পরিবর্তন হয়েছে।");
+     }catch(e){alert("Role পরিবর্তন হয়নি: "+e.message);}
+     finally{change.disabled=false;}
     };
     const disable=document.createElement("button");disable.textContent="Admin ID বন্ধ করুন";disable.className="rejectBtn";disable.onclick=async()=>{
-     if(!confirm("এই Admin ID স্থায়ীভাবে নিষ্ক্রিয় করবেন?"))return;
-     disable.disabled=true;try{await httpsCallable(functions,"disableServiceAdmin")({uid:item.id});alert("Admin ID নিষ্ক্রিয় হয়েছে।");}
-     catch(e){alert("বন্ধ করা যায়নি: "+e.message);}finally{disable.disabled=false;}
+     if(!confirm("এই Admin ID নিষ্ক্রিয় করবেন?"))return;
+     disable.disabled=true;
+     try{
+      await updateDoc(doc(db,"adminAccounts",item.id),{
+       status:"disabled",updatedBy:auth.currentUser.uid,updatedAt:serverTimestamp()
+      });
+      await addDoc(collection(db,"adminAuditLogs"),{
+       actorUid:auth.currentUser.uid,action:"disable_admin",targetUid:item.id,createdAt:serverTimestamp()
+      });
+      alert("Admin ID নিষ্ক্রিয় হয়েছে।");
+     }catch(e){alert("বন্ধ করা যায়নি: "+e.message);}
+     finally{disable.disabled=false;}
     };
     card.append(roleSelect,change,disable);
    }
@@ -592,10 +629,17 @@ onAuthStateChanged(auth,async user=>{
  }
 
  try{
-  const token=await getIdTokenResult(user,true);
-
-  currentIsSuperAdmin=token.claims.admin===true;
-  currentAdminRoles=Array.isArray(token.claims.adminRoles)?token.claims.adminRoles:[];
+  currentIsSuperAdmin=user.uid===SUPER_ADMIN_UID;
+  currentAdminRoles=[];
+  if(!currentIsSuperAdmin){
+   const adminSnap=await getDoc(doc(db,"adminAccounts",user.uid));
+   if(adminSnap.exists()){
+    const adminData=adminSnap.data();
+    if(adminData.status==="active"){
+     currentAdminRoles=Array.isArray(adminData.roles)?adminData.roles:(adminData.role?[adminData.role]:[]);
+    }
+   }
+  }
   if(currentIsSuperAdmin || currentAdminRoles.length){
    $("login").style.display="none";
    $("dashboard").style.display="block";
@@ -621,7 +665,7 @@ onAuthStateChanged(auth,async user=>{
   console.error(error);
   await signOut(auth);
   $("login").style.display="block";
-  $("message").textContent="Admin অনুমতি যাচাই করা যায়নি।";
+  $("message").textContent="Admin অনুমতি যাচাই করা যায়নি: "+(error.code||error.message);
  }
 });
 
