@@ -342,6 +342,15 @@ service cloud.firestore {
       allow create, update, delete: if false;
     }
 
+    // A driver can read only ride offers addressed to their own account.
+    // Offer creation and acceptance are server-only Cloud Function operations.
+    match /rideOffers/{offerId} {
+      allow read: if signedIn()
+        && resource.data.driverId == request.auth.uid
+        && isApprovedDriver(request.auth.uid);
+      allow create, update, delete: if false;
+    }
+
     match /rideLocations/{bookingId}/participants/{participantUid} {
       allow read: if isRideParticipant(bookingId);
 
