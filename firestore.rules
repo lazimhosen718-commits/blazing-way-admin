@@ -592,6 +592,53 @@ service cloud.firestore {
       allow create, update, delete: if false;
     }
 
+
+    // CUSTOMER OFFERS: published offers are visible to signed-in customers.
+    // Only Super Admin can publish, edit, or remove offers.
+    match /platformOffers/{offerId} {
+      allow read: if signedIn() && resource.data.active == true;
+      allow create, update, delete: if isSuperAdmin();
+    }
+
+    // CUSTOMER INBOX: each customer can read only their own conversation.
+    // Customers can send messages; Super Admin can send replies/announcements.
+    match /customerInbox/{customerId}/messages/{messageId} {
+      allow read: if isSuperAdmin() || (signedIn() && request.auth.uid == customerId);
+
+      allow create: if (
+          isSuperAdmin()
+          && request.resource.data.senderUid == request.auth.uid
+          && request.resource.data.senderRole == 'admin'
+          && request.resource.data.keys().hasOnly(['senderUid', 'senderRole', 'body', 'read', 'createdAt'])
+          && request.resource.data.body is string
+          && request.resource.data.body.size() >= 2
+          && request.resource.data.body.size() <= 1000
+          && request.resource.data.read == false
+          && request.resource.data.createdAt == request.time
+        ) || (
+          signedIn()
+          && request.auth.uid == customerId
+          && request.resource.data.senderUid == customerId
+          && request.resource.data.senderRole == 'customer'
+          && request.resource.data.keys().hasOnly(['senderUid', 'senderRole', 'body', 'read', 'createdAt'])
+          && request.resource.data.body is string
+          && request.resource.data.body.size() >= 2
+          && request.resource.data.body.size() <= 1000
+          && request.resource.data.read == false
+          && request.resource.data.createdAt == request.time
+        );
+
+      allow update: if isSuperAdmin()
+        || (
+          signedIn()
+          && request.auth.uid == customerId
+          && resource.data.senderRole == 'admin'
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read'])
+          && request.resource.data.read == true
+        );
+      allow delete: if isSuperAdmin();
+    }
+
     // DEFAULT DENY — all unspecified collections and operations.
     // ---------------------------------------------------------
     match /{document=**} {
