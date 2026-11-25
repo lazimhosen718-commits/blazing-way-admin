@@ -468,6 +468,11 @@ function requestAppLocation(){
 document.getElementById("gpsRetryBtn").addEventListener("click",()=>{
  gpsRequested=false;requestAppLocation();
 });
+["pickup","destination"].forEach(id=>document.getElementById(id).addEventListener("input",()=>{
+ currentRoute=null;
+ document.getElementById("distance").value="";
+ document.getElementById("routeStatus").textContent="ঠিকানা পরিবর্তন হয়েছে। নতুন রাস্তার দূরত্ব হিসাব করতে ভাড়া হিসাব করুন চাপুন।";
+}));
 document.getElementById("homeDestinationSearch").addEventListener("change",e=>{const v=e.target.value.trim();if(v){document.getElementById("destination").value=v;document.getElementById("rideSection").scrollIntoView({behavior:"smooth"});}});
 document.getElementById("foodSearchHome").addEventListener("input",e=>{const q=e.target.value.trim().toLowerCase();document.querySelectorAll("#foodMenuList .booking-item").forEach(el=>el.style.display=el.textContent.toLowerCase().includes(q)?"":"none");});
 document.querySelectorAll("[data-food-filter]").forEach(b=>b.addEventListener("click",()=>{document.querySelector('[data-service="food"]').click();document.getElementById("foodSearchHome").value=b.dataset.foodFilter;loadFoodMenu().then(()=>{const q=b.dataset.foodFilter.toLowerCase();document.querySelectorAll("#foodMenuList .booking-item").forEach(el=>el.style.display=el.textContent.toLowerCase().includes(q)?"":"none");});}));
@@ -1121,20 +1126,14 @@ bookingBtn.addEventListener("click",async()=>{
 
  let result;
 
- try{
-  result=calculateFare();
- }catch(error){
-  bookingMessage.textContent=error.message;
-  return;
- }
-
  bookingBtn.disabled=true;
  bookingBtn.textContent="Booking হচ্ছে...";
  bookingMessage.textContent="আপনার বুকিং জমা হচ্ছে...";
 
  try{
 
-  if(!currentRoute){await buildRideRoute();result=calculateFare();}
+  await buildRideRoute();
+  result=calculateFare();
   let pickupGps = currentRoute?.pickup || currentGps;
   if (!pickupGps && navigator.geolocation && window.confirm("বর্তমান GPS-কে Pickup হিসেবে ব্যবহার করতে চান? OK চাপুন।")) {
    try {
