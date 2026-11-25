@@ -143,6 +143,9 @@ let stopPayments=null;
 let rideDocs=[];
 let paymentDocs=[];
 let busy=false;
+import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-functions.js";
+const functions=getFunctions(app,"asia-south1");
+let stopRideOffers=null;
 
 const money=n=>"৳"+Number(n||0).toFixed(2);
 
@@ -153,8 +156,10 @@ function showError(id,message){
 function stopListeners(){
  if(stopRides)stopRides();
  if(stopPayments)stopPayments();
+ if(stopRideOffers)stopRideOffers();
  stopRides=null;
  stopPayments=null;
+ stopRideOffers=null;
 }
 
 async function checkDriver(user){
@@ -191,6 +196,7 @@ async function checkDriver(user){
   updateOnlineDisplay();
 
   loadRides();
+  loadRideOffers();
   loadPayments();
 
   showError("statusMessage","আপনার Driver Dashboard প্রস্তুত।");
@@ -303,6 +309,38 @@ function addDriverLivePanel(bookingId,d,card){
   const ll=[v.lat,v.lng];if(driverMarker)driverMarker.setLatLng(ll);else driverMarker=L.marker(ll).addTo(map).bindPopup("আপনার অবস্থান");
  },()=>{});
  map.whenReady(()=>setTimeout(()=>map.invalidateSize(),250));
+}
+
+// REAL-TIME RIDE OFFERS — first successful accept wins.
+function loadRideOffers(){
+ const offersArea=$("rides");
+ const q=query(collection(db,"rideOffers"),where("driverId","==",currentDriver.uid),where("status","==","pending"));
+ stopRideOffers=onSnapshot(q,snapshot=>{
+  snapshot.docs.forEach(item=>{
+   const d=item.data();
+   if(document.getElementById("offer_"+item.id))return;
+   const card=document.createElement("div");
+   card.id="offer_"+item.id;
+   card.className="ride";
+   const heading=document.createElement("h3");heading.textContent="নতুন Ride Request";
+   const details=document.createElement("p");
+   details.textContent="Pickup: "+d.pickup+" | Destination: "+d.destination+" | "+d.distanceKm+" KM | ভাড়া ৳"+d.estimatedFare;
+   const accept=document.createElement("button");accept.className="green";accept.textContent="Ride Accept করুন";
+   accept.onclick=async()=>{
+    accept.disabled=true;
+    try{
+     await httpsCallable(functions,"acceptRideOffer")({rideId:d.rideId});
+     alert("Ride আপনার নামে Assign হয়েছে।");
+     card.remove();
+    }catch(error){
+     alert(error.message||"অন্য Driver Ride গ্রহণ করেছেন।");
+     card.remove();
+    }
+   };
+   card.append(heading,details,accept);
+   offersArea.prepend(card);
+  });
+ },error=>console.error("Ride offers listener:",error));
 }
 
 // ASSIGNED RIDES
