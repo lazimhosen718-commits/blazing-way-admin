@@ -21,8 +21,7 @@ service cloud.firestore {
         signedIn()
         && exists(/databases/$(database)/documents/adminAccounts/$(request.auth.uid))
         && get(/databases/$(database)/documents/adminAccounts/$(request.auth.uid)).data.status == 'active'
-        && get(/databases/$(database)/documents/adminAccounts/$(request.auth.uid)).data.roles is list
-        && role in get(/databases/$(database)/documents/adminAccounts/$(request.auth.uid)).data.roles
+        && get(/databases/$(database)/documents/adminAccounts/$(request.auth.uid)).data.role == role
       );
     }
 
@@ -244,9 +243,9 @@ service cloud.firestore {
     }
 
     match /driverPayments/{paymentId} {
-      allow read: if (isFinanceAdmin() || isRideAdmin()) || (signedIn() && resource.data.driverId == request.auth.uid);
+      allow read: if isFinanceAdmin() || (signedIn() && resource.data.driverId == request.auth.uid);
 
-      allow create: if (isFinanceAdmin() || isRideAdmin())
+      allow create: if isFinanceAdmin()
         && request.resource.data.keys().hasAll([
           'driverId', 'driverName', 'amount', 'method', 'reference',
           'paidAt', 'recordedBy', 'createdAt'
@@ -271,15 +270,15 @@ service cloud.firestore {
     }
 
     match /passengerWallets/{passengerId} {
-      allow read: if (isFinanceAdmin() || isRideAdmin()) || (signedIn() && request.auth.uid == passengerId);
+      allow read: if isFinanceAdmin() || (signedIn() && request.auth.uid == passengerId);
 
-      allow create: if (isFinanceAdmin() || isRideAdmin())
+      allow create: if isFinanceAdmin()
         && request.resource.data.keys().hasOnly(['balance', 'updatedAt'])
         && request.resource.data.balance is number
         && request.resource.data.balance >= 0
         && request.resource.data.updatedAt == request.time;
 
-      allow update: if (isFinanceAdmin() || isRideAdmin())
+      allow update: if isFinanceAdmin()
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['balance', 'updatedAt'])
         && request.resource.data.balance is number
         && request.resource.data.balance >= 0
@@ -360,7 +359,7 @@ service cloud.firestore {
     }
 
     match /driverWallets/{driverId} {
-      allow read: if (isFinanceAdmin() || isRideAdmin()) || (signedIn() && request.auth.uid == driverId && isApprovedDriver(driverId));
+      allow read: if isFinanceAdmin() || (signedIn() && request.auth.uid == driverId && isApprovedDriver(driverId));
       allow create, update, delete: if false;
     }
 
