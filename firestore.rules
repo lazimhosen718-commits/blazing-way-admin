@@ -10,15 +10,18 @@ service cloud.firestore {
       return request.auth != null;
     }
 
+    // Super Admin bootstrap: this UID belongs to lazimhosen01731@gmail.com.
+    // Keep this UID fixed; do not allow client-side self-promotion.
     function isSuperAdmin() {
-      return signedIn() && request.auth.token.admin == true;
+      return signedIn() && request.auth.uid == 'fINwRzYnqVUy6to1ZBvHzvACyqm1';
     }
 
     function hasAdminRole(role) {
-      return signedIn() && (
-        request.auth.token.admin == true ||
-        (request.auth.token.adminRoles is list && role in request.auth.token.adminRoles)
-      );
+      return signedIn()
+        && exists(/databases/$(database)/documents/adminAccounts/$(request.auth.uid))
+        && get(/databases/$(database)/documents/adminAccounts/$(request.auth.uid)).data.status == 'active'
+        && get(/databases/$(database)/documents/adminAccounts/$(request.auth.uid)).data.roles is list
+        && role in get(/databases/$(database)/documents/adminAccounts/$(request.auth.uid)).data.roles;
     }
 
     function isRideAdmin() { return hasAdminRole('ride'); }
@@ -569,13 +572,18 @@ service cloud.firestore {
     // SUPER ADMIN CONTROL: metadata is readable only by Super Admin.
     // All writes happen through trusted Admin SDK callable functions.
     match /adminAccounts/{adminId} {
-      allow read: if isSuperAdmin();
-      allow create, update, delete: if false;
+      // Super Admin manages all records; each signed-in user may read only their own role.
+      allow read: if isSuperAdmin() || (signedIn() && request.auth.uid == adminId);
+      allow create, update: if isSuperAdmin();
+      allow delete: if false;
     }
 
     match /adminAuditLogs/{logId} {
       allow read: if isSuperAdmin();
-      allow create, update, delete: if false;
+      allow create: if isSuperAdmin()
+        && request.resource.data.actorUid == request.auth.uid
+        && request.resource.data.createdAt == request.time;
+      allow update, delete: if false;
     }
 
     match /platformSettings/{settingId} {
