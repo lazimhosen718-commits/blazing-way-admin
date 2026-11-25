@@ -291,8 +291,10 @@ button{border-radius:14px}
 <option value="car">Private Car</option>
 </select>
 
-<label>আনুমানিক দূরত্ব (কিলোমিটার)</label>
-<input id="distance" type="number" min="0.1" max="200" step="0.1" placeholder="যেমন: 5">
+<label>GPS / Map অনুযায়ী রাস্তার দূরত্ব</label>
+<input id="distance" type="text" readonly placeholder="Pickup ও Destination দিলে অটো হিসাব হবে">
+<p class="small" id="routeStatus">📍 Pickup ও Destination লিখুন। ম্যাপ থেকে রাস্তার দূরত্ব নিজে হিসাব হবে।</p>
+<div id="rideRouteMap" class="live-map" style="display:none"></div>
 
 <button id="calculateBtn">ভাড়া হিসাব করুন</button>
 
@@ -443,6 +445,9 @@ let passengerReady=false;
 let unsubscribeBookings=null;
 let currentGps=null;
 let gpsRequested=false;
+let currentRoute=null;
+let routeMap=null;
+let routeLine=null;
 function requestAppLocation(){
  if(gpsRequested)return;
  gpsRequested=true;
@@ -694,11 +699,49 @@ document.querySelectorAll(".service").forEach(button=>{
 
 });
 
+// Address search and road route distance (OpenStreetMap Nominatim + OSRM)
+async function geocodeRideAddress(address){
+ const url="https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&countrycodes=bd&q="+encodeURIComponent(address);
+ const response=await fetch(url,{headers:{"Accept":"application/json"}});
+ if(!response.ok)throw new Error("ম্যাপ থেকে ঠিকানা খুঁজে পাওয়া যায়নি।");
+ const places=await response.json();
+ if(!places.length)throw new Error("ঠিকানা পাওয়া যায়নি। Pickup ও Destination আরও স্পষ্ট করে লিখুন।");
+ return {lat:Number(places[0].lat),lng:Number(places[0].lon),label:places[0].display_name};
+}
+async function buildRideRoute(){
+ const pickupText=document.getElementById("pickup").value.trim();
+ const destinationText=document.getElementById("destination").value.trim();
+ const status=document.getElementById("routeStatus");
+ if(!pickupText||!destinationText)throw new Error("Pickup ও Destination লিখুন।");
+ status.textContent="📍 ম্যাপ থেকে Pickup ও Destination খোঁজা হচ্ছে...";
+ const pickup=await geocodeRideAddress(pickupText);
+ const destination=await geocodeRideAddress(destinationText);
+ status.textContent="🛣️ রাস্তার রুট ও দূরত্ব হিসাব হচ্ছে...";
+ const url="https://router.project-osrm.org/route/v1/driving/"+pickup.lng+","+pickup.lat+";"+destination.lng+","+destination.lat+"?overview=full&geometries=geojson";
+ const response=await fetch(url);
+ if(!response.ok)throw new Error("রাস্তার রুট পাওয়া যায়নি। আবার চেষ্টা করুন।");
+ const data=await response.json();
+ if(data.code!=="Ok"||!data.routes||!data.routes.length)throw new Error("এই দুই স্থানের মধ্যে রাস্তার রুট পাওয়া যায়নি।");
+ const route=data.routes[0];
+ const distanceKm=Math.round((route.distance/1000)*10)/10;
+ if(distanceKm<=0||distanceKm>200)throw new Error("রুটের দূরত্ব ২০০ কিমির বেশি বা সঠিক নয়।");
+ currentRoute={pickup,destination,distanceKm,geometry:route.geometry};
+ document.getElementById("distance").value=distanceKm+" কিমি";
+ status.textContent="✅ ম্যাপ অনুযায়ী রাস্তার দূরত্ব: "+distanceKm+" কিমি";
+ const mapBox=document.getElementById("rideRouteMap");mapBox.style.display="block";
+ if(!routeMap){routeMap=L.map(mapBox).setView([pickup.lat,pickup.lng],12);L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{attribution:"© OpenStreetMap contributors"}).addTo(routeMap);}
+ if(routeLine)routeLine.remove();
+ routeLine=L.geoJSON(route.geometry,{style:{color:"#087443",weight:5}}).addTo(routeMap);
+ routeMap.fitBounds(routeLine.getBounds(),{padding:[20,20]});
+ setTimeout(()=>routeMap.invalidateSize(),100);
+ return currentRoute;
+}
+
 // FARE CALCULATION
 function calculateFare(){
 
  const vehicle=document.getElementById("vehicle").value;
- const distance=Number(document.getElementById("distance").value);
+ const distance=Number(currentRoute?.distanceKm);
 
  if(!Number.isFinite(distance)||distance<=0||distance>200){
   throw new Error("দূরত্ব ০-এর বেশি এবং সর্বোচ্চ ২০০ কিলোমিটার হতে হবে।");
@@ -1023,7 +1066,7 @@ document.getElementById("logoutBtn")
 
 // CALCULATE FARE
 document.getElementById("calculateBtn")
-.addEventListener("click",()=>{
+.addEventListener("click",async()=>{
 
  const pickup=document.getElementById("pickup").value.trim();
  const destination=document.getElementById("destination").value.trim();
@@ -1035,6 +1078,7 @@ document.getElementById("calculateBtn")
 
  try{
 
+  await buildRideRoute();
   const result=calculateFare();
 
   fareBox.textContent="৳"+result.total;
@@ -1090,7 +1134,8 @@ bookingBtn.addEventListener("click",async()=>{
 
  try{
 
-  let pickupGps = currentGps;
+  if(!currentRoute){await buildRideRoute();result=calculateFare();}
+  let pickupGps = currentRoute?.pickup || currentGps;
   if (!pickupGps && navigator.geolocation && window.confirm("বর্তমান GPS-কে Pickup হিসেবে ব্যবহার করতে চান? OK চাপুন।")) {
    try {
     pickupGps = await new Promise((resolve, reject) => {
@@ -1114,6 +1159,8 @@ bookingBtn.addEventListener("click",async()=>{
    distanceKm:result.distance,
    estimatedFare:result.total,
    ...(pickupGps ? {pickupLat:pickupGps.lat,pickupLng:pickupGps.lng} : {}),
+   ...(currentRoute?.destination ? {destinationLat:currentRoute.destination.lat,destinationLng:currentRoute.destination.lng} : {}),
+   routeDistanceKm:result.distance,
    status:"pending",
    createdAt:serverTimestamp()
   };
@@ -1140,6 +1187,8 @@ bookingBtn.addEventListener("click",async()=>{
   document.getElementById("pickup").value="";
   document.getElementById("destination").value="";
   document.getElementById("distance").value="";
+  document.getElementById("routeStatus").textContent="পরবর্তী Ride-এর জন্য Pickup ও Destination দিন।";
+  currentRoute=null;
   fareBox.textContent="৳০";
   fareDetails.textContent=
    "দূরত্ব ও যানবাহন নির্বাচন করে ভাড়া হিসাব করুন।";
