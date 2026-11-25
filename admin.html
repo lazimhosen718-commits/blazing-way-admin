@@ -71,7 +71,7 @@ button:disabled{opacity:.5;cursor:not-allowed}
   <div><label>Temporary Password (কমপক্ষে ৮ অক্ষর)</label><input id="newAdminPassword" type="password" placeholder="Password"></div>
   <div><label>দায়িত্ব নির্বাচন</label><select id="newAdminRole">
    <option value="ride">Ride Admin</option><option value="food">Food Admin</option>
-   <option value="food_rider">Food Rider Admin</option>
+   <option value="food_rider">Food Rider Admin</option><option value="parcel">Parcel Admin</option>
    <option value="support">Customer Support Admin</option><option value="system">System Admin</option>
   </select></div>
  </div>
@@ -286,6 +286,8 @@ Driver-এর আয় = সম্পন্ন ভাড়া − প্রযোজ
  <p class="small">Pending Food Rider আবেদন Approve/Reject এবং প্রয়োজন হলে Suspend করা যাবে।</p>
  <div id="foodRiders">লোড হচ্ছে...</div>
 </div>
+
+<div class="card" id="parcelRiderManagement" style="display:none"><h2>📦 Parcel Rider Applications</h2><p class="small">Parcel Rider আবেদন Approve/Reject/Suspend করুন।</p><div id="parcelRidersList">লোড হচ্ছে...</div></div>
 
 <div class="card" id="foodOrderMonitoring">
  <h2>📦 Food Order Monitoring</h2>
@@ -543,7 +545,7 @@ function loadAdminAccounts(){
    ]);
    if(d.status!=="disabled"){
     const roleSelect=document.createElement("select");
-    ["ride","food","food_rider","support","system"].forEach(role=>{
+    ["ride","food","food_rider","parcel","support","system"].forEach(role=>{
      const option=document.createElement("option");option.value=role;option.textContent=role;option.selected=role===d.role;roleSelect.appendChild(option);
     });
     const change=document.createElement("button");change.textContent="Role পরিবর্তন";change.onclick=async()=>{
@@ -589,6 +591,7 @@ function applyAdminRoleVisibility(){
  const ride=currentIsSuperAdmin||currentAdminRoles.includes("ride");
  const food=currentIsSuperAdmin||currentAdminRoles.includes("food");
  const foodRider=currentIsSuperAdmin||currentAdminRoles.includes("food_rider");
+ const parcel=currentIsSuperAdmin||currentAdminRoles.includes("parcel");
  const rideFinance=currentIsSuperAdmin||currentAdminRoles.includes("ride");
  const foodFinance=currentIsSuperAdmin||currentAdminRoles.includes("food");
 
@@ -606,6 +609,7 @@ function applyAdminRoleVisibility(){
  setCardVisible("foodRiderManagement",foodRider);
  setCardVisible("foodOrderMonitoring",food||foodRider);
  setCardVisible("foodWalletReport",foodFinance);
+ setCardVisible("parcelRiderManagement",parcel);
 
  const welcome=document.querySelector("#dashboard > .card h2");
  if(welcome)welcome.textContent=currentIsSuperAdmin?"স্বাগতম, Super Admin!":"স্বাগতম, Service Admin!";
@@ -676,6 +680,7 @@ onAuthStateChanged(auth,async user=>{
    if(currentIsSuperAdmin || currentAdminRoles.includes("ride")){
     loadPayments();loadDepositRequests();loadFinanceRideData();loadRideCommissionSettings();
    }
+   if(currentIsSuperAdmin || currentAdminRoles.includes("parcel")){loadParcelRiderApplications();}
    if(currentIsSuperAdmin || currentAdminRoles.includes("food") || currentAdminRoles.includes("food_rider")){
     loadFoodDeliveryAdmin({
      food:currentIsSuperAdmin||currentAdminRoles.includes("food"),
@@ -704,6 +709,27 @@ onAuthStateChanged(auth,async user=>{
  }
 });
 
+
+
+function loadParcelRiderApplications(){
+ onSnapshot(collection(db,"parcelRiderProfiles"),snap=>{
+  const box=$("parcelRidersList");if(!box)return;box.replaceChildren();
+  if(snap.empty){box.textContent="এখনো কোনো Parcel Rider আবেদন নেই।";return;}
+  snap.forEach(d=>{
+   const x=d.data(),card=document.createElement("div");card.className="application";
+   const info=document.createElement("p");info.textContent=(x.fullName||"")+" • "+(x.phone||"")+" • "+(x.status||"pending");
+   card.append(info);
+   if(["pending","approved"].includes(x.status)){
+    ["approved","rejected","suspended"].forEach(status=>{
+     const b=document.createElement("button");b.textContent=status==="approved"?"Approve":status==="rejected"?"Reject":"Suspend";b.className=status==="approved"?"approveBtn":"rejectBtn";
+     b.onclick=async()=>{b.disabled=true;try{await updateDoc(doc(db,"parcelRiderProfiles",d.id),{status,reviewedBy:auth.currentUser.uid,reviewedAt:serverTimestamp()});}catch(e){alert("পরিবর্তন হয়নি: "+e.message);}finally{b.disabled=false;}};
+     card.append(b);
+    });
+   }
+   box.append(card);
+  });
+ },err=>{const box=$("parcelRidersList");if(box)box.textContent="আবেদন লোড হয়নি: "+err.code;});
+}
 
 let stopAdminOffers=null;
 let stopCustomerMessages=null;
