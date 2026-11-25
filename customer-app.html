@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="bn"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#102a56"><title>BLAZING-WAY | Customer App</title>
 <style>
-*{box-sizing:border-box}body{margin:0;background:#f1f5f9;color:#14213d;font-family:Arial,sans-serif}header{background:linear-gradient(135deg,#102a56,#1769aa);color:#fff;text-align:center;padding:25px 15px}main{max-width:760px;margin:22px auto;padding:0 14px 35px}.card{background:white;border-radius:14px;padding:19px;margin:14px 0;box-shadow:0 3px 14px #0f172a12}input,button{width:100%;padding:13px;margin:7px 0;border:1px solid #cbd5e1;border-radius:8px;font-size:16px}button,.btn{background:#1456a0;color:#fff;border:0;font-weight:bold;cursor:pointer;text-align:center;text-decoration:none;display:block;padding:13px;border-radius:8px;margin-top:10px}.secondary{background:#475569}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:12px}.service{border:1px solid #e2e8f0;border-radius:12px;padding:15px}.hidden{display:none!important}.muted{color:#64748b;line-height:1.5}#message{white-space:pre-wrap;overflow-wrap:anywhere}.ok{color:#087443}.err{color:#b42318}a{color:#1456a0}
+*{box-sizing:border-box}html,body,body *{-webkit-user-select:none!important;user-select:none!important;-webkit-touch-callout:none}input,textarea{ -webkit-user-select:text!important;user-select:text!important}body{margin:0;background:#f1f5f9;color:#14213d;font-family:Arial,sans-serif}header{background:linear-gradient(135deg,#102a56,#1769aa);color:#fff;text-align:center;padding:25px 15px}main{max-width:760px;margin:22px auto;padding:0 14px 35px}.card{background:white;border-radius:14px;padding:19px;margin:14px 0;box-shadow:0 3px 14px #0f172a12}input,button{width:100%;padding:13px;margin:7px 0;border:1px solid #cbd5e1;border-radius:8px;font-size:16px}button,.btn{background:#1456a0;color:#fff;border:0;font-weight:bold;cursor:pointer;text-align:center;text-decoration:none;display:block;padding:13px;border-radius:8px;margin-top:10px}.secondary{background:#475569}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:12px}.service{border:1px solid #e2e8f0;border-radius:12px;padding:15px}.hidden{display:none!important}.muted{color:#64748b;line-height:1.5}#message{white-space:pre-wrap;overflow-wrap:anywhere}.ok{color:#087443}.err{color:#b42318}a{color:#1456a0}
 </style></head><body>
 <header><h1>BLAZING-WAY</h1><p>একটি Customer Account • সব সার্ভিস</p></header><main>
 <section class="card" id="authCard"><h2 id="authTitle">Customer Login</h2><form id="authForm">
@@ -26,7 +26,7 @@
 <h3>আমার অর্ডার</h3><button id="ordersRefresh" class="secondary" type="button">অর্ডার Refresh</button><div id="ordersList">অর্ডার লোড হচ্ছে...</div>
 <p id="foodMessage"></p>
 </section>
-<p><a href="index.html">মূল পেজে ফিরে যান</a></p></main>
+</main>
 <script type="module">
 import{initializeApp}from"https://www.gstatic.com/firebasejs/12.0.0/firebase-app.js";
 import{getAuth,onAuthStateChanged,createUserWithEmailAndPassword,signInWithEmailAndPassword,signOut,updateProfile}from"https://www.gstatic.com/firebasejs/12.0.0/firebase-auth.js";
@@ -59,4 +59,4 @@ $("ordersRefresh").onclick=loadFoodOrders;
 $("placeOrderBtn").onclick=async()=>{if(!cart.size){$("foodMessage").textContent="প্রথমে খাবার Cart-এ যোগ করুন।";return;}const address=$("address").value.trim(),phone=$("orderPhone").value.trim();if(!address||!/^01[3-9][0-9]{8}$/.test(phone)){$("foodMessage").textContent="সম্পূর্ণ ঠিকানা ও সঠিক মোবাইল নম্বর দিন।";return;}const b=$("placeOrderBtn");b.disabled=true;try{const call=httpsCallable(functions,"placeFoodOrder");const r=await call({merchantId:merchantForCart,deliveryAddress:address,customerPhone:phone,items:[...cart.values()].map(x=>({itemId:x.itemId,quantity:x.quantity}))});cart.clear();merchantForCart="";renderFoodCart();$("foodMessage").textContent="অর্ডার সফল! Order ID: "+r.data.orderId+" | মোট ৳"+r.data.subtotal;await loadFoodOrders();}catch(e){$("foodMessage").textContent=e.message||"অর্ডার করা যায়নি।";}finally{b.disabled=false;}};
 
 $("logoutBtn").onclick=()=>signOut(auth);
-</script></body></html>
+</script><script>document.addEventListener("copy",e=>e.preventDefault());document.addEventListener("cut",e=>e.preventDefault());document.addEventListener("contextmenu",e=>e.preventDefault());</script></body></html>
