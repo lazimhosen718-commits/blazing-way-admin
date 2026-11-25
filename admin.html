@@ -80,6 +80,24 @@ button:disabled{opacity:.5;cursor:not-allowed}
  <h3>তৈরি করা Admin Account</h3><div id="adminAccountList">লোড হচ্ছে...</div>
 </div>
 
+
+<div class="card" id="customerCommunicationAdmin" style="display:none">
+ <h2>🎁 Customer Offers & Inbox Management</h2>
+ <p class="small">শুধু Super Admin অফার প্রকাশ এবং Customer Inbox-এ উত্তর পাঠাতে পারবেন।</p>
+ <h3>নতুন অফার প্রকাশ</h3>
+ <input id="newOfferTitle" maxlength="100" placeholder="অফারের শিরোনাম">
+ <input id="newOfferDescription" maxlength="500" placeholder="অফারের বিস্তারিত">
+ <div class="grid">
+  <input id="newOfferDiscount" maxlength="60" placeholder="Discount (যেমন ২০% ছাড়)">
+  <input id="newOfferCode" maxlength="40" placeholder="Promo Code (ঐচ্ছিক)">
+ </div>
+ <label>অফারের শেষ তারিখ</label><input id="newOfferEnd" type="date">
+ <button id="publishOfferBtn" class="approveBtn">অফার Publish করুন</button><p id="offerAdminStatus" class="small"></p>
+ <h3>প্রকাশিত অফার</h3><div id="adminOffersList">লোড হচ্ছে...</div>
+ <hr>
+ <h3>📩 Customer Support Inbox</h3><div id="adminCustomerMessages">বার্তা লোড হচ্ছে...</div>
+</div>
+
 <div class="grid">
 
 <div class="card" id="driverApplicationsSummary">
@@ -301,7 +319,7 @@ import {
 } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-auth.js";
 
 import {
- getFirestore,collection,onSnapshot,doc,updateDoc,setDoc,
+ getFirestore,collection,collectionGroup,onSnapshot,doc,updateDoc,setDoc,
  serverTimestamp,query,where,getDoc,addDoc,runTransaction
 } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-firestore.js";
 
@@ -665,7 +683,13 @@ onAuthStateChanged(auth,async user=>{
      finance:currentIsSuperAdmin||currentAdminRoles.includes("food")
     });
    }
-   if(currentIsSuperAdmin){loadAdminAccounts();loadRideCommissionSettings();loadRideOperationsSettings();}
+   if(currentIsSuperAdmin){
+    loadAdminAccounts();loadRideCommissionSettings();loadRideOperationsSettings();
+    $("customerCommunicationAdmin").style.display="block";
+    loadCustomerCommunicationAdmin();
+   }else{
+    $("customerCommunicationAdmin").style.display="none";
+   }
   }else{
    await signOut(auth);
    $("login").style.display="block";
@@ -678,6 +702,54 @@ onAuthStateChanged(auth,async user=>{
   $("login").style.display="block";
   $("message").textContent="Admin অনুমতি যাচাই করা যায়নি: "+(error.code||error.message);
  }
+});
+
+
+let stopAdminOffers=null;
+let stopCustomerMessages=null;
+function loadCustomerCommunicationAdmin(){
+ if(stopAdminOffers)stopAdminOffers();
+ if(stopCustomerMessages)stopCustomerMessages();
+ stopAdminOffers=onSnapshot(collection(db,"platformOffers"),snap=>{
+  const box=$("adminOffersList");box.replaceChildren();
+  if(snap.empty){box.textContent="এখনো কোনো অফার নেই।";return;}
+  snap.forEach(d=>{
+   const data=d.data(),row=document.createElement("div");row.className="application";
+   const title=document.createElement("strong");title.textContent=data.title||"Offer";
+   const detail=document.createElement("p");detail.textContent=(data.description||"")+" | "+(data.discount||"")+" | "+(data.code||"");
+   const state=document.createElement("p");state.textContent=data.active?"চালু":"বন্ধ";
+   const toggle=document.createElement("button");toggle.textContent=data.active?"বন্ধ করুন":"চালু করুন";
+   toggle.onclick=async()=>{toggle.disabled=true;try{await updateDoc(doc(db,"platformOffers",d.id),{active:!data.active});}catch(e){alert("পরিবর্তন করা যায়নি: "+(e.code||e.message));}finally{toggle.disabled=false;}};
+   row.append(title,detail,state,toggle);box.appendChild(row);
+  });
+ },e=>{$("adminOffersList").textContent="Offers Rules পরীক্ষা করুন: "+e.code;});
+ stopCustomerMessages=onSnapshot(query(collectionGroup(db,"messages"),where("senderRole","==","customer")),snap=>{
+  const box=$("adminCustomerMessages");box.replaceChildren();
+  const docs=snap.docs.slice().sort((a,b)=>(b.data().createdAt?.toMillis?.()||0)-(a.data().createdAt?.toMillis?.()||0));
+  if(!docs.length){box.textContent="নতুন Customer Message নেই।";return;}
+  docs.forEach(d=>{
+   const uid=d.ref.parent.parent.id,data=d.data(),row=document.createElement("div");row.className="application";
+   const who=document.createElement("strong");who.textContent="Customer UID: "+uid;
+   const body=document.createElement("p");body.textContent=data.body||"";
+   const time=document.createElement("p");time.className="small";time.textContent=data.createdAt?.toDate?data.createdAt.toDate().toLocaleString("bn-BD"):"";
+   const reply=document.createElement("button");reply.textContent="Reply দিন";reply.className="approveBtn";
+   reply.onclick=async()=>{const value=prompt("Customer-কে উত্তর লিখুন:");if(!value||value.trim().length<2)return;reply.disabled=true;try{await addDoc(collection(db,"customerInbox",uid,"messages"),{senderUid:auth.currentUser.uid,senderRole:"admin",body:value.trim().slice(0,1000),read:false,createdAt:serverTimestamp()});alert("উত্তর পাঠানো হয়েছে।");}catch(e){alert("উত্তর পাঠানো যায়নি: "+(e.code||e.message));}finally{reply.disabled=false;}};
+   row.append(who,body,time,reply);box.appendChild(row);
+  });
+ },e=>{$("adminCustomerMessages").textContent="Inbox Rules পরীক্ষা করুন: "+e.code;});
+}
+$("publishOfferBtn").addEventListener("click",async()=>{
+ const title=$("newOfferTitle").value.trim(),description=$("newOfferDescription").value.trim();
+ const discount=$("newOfferDiscount").value.trim(),code=$("newOfferCode").value.trim(),end=$("newOfferEnd").value;
+ const status=$("offerAdminStatus"),btn=$("publishOfferBtn");
+ if(title.length<2||description.length<2){status.textContent="শিরোনাম ও বিস্তারিত লিখুন।";return;}
+ btn.disabled=true;status.textContent="অফার প্রকাশ হচ্ছে...";
+ try{
+  await addDoc(collection(db,"platformOffers"),{title,description,discount,code,active:true,publishedAt:serverTimestamp(),startAt:new Date(),endAt:end?new Date(end+"T23:59:59"):null,createdBy:auth.currentUser.uid});
+  $("newOfferTitle").value="";$("newOfferDescription").value="";$("newOfferDiscount").value="";$("newOfferCode").value="";$("newOfferEnd").value="";
+  status.textContent="অফার Customer App-এ প্রকাশ হয়েছে।";
+ }catch(e){console.error(e);status.textContent="অফার প্রকাশ হয়নি: "+(e.code||e.message);}
+ finally{btn.disabled=false;}
 });
 
 // DRIVER APPLICATIONS
