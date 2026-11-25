@@ -46,6 +46,63 @@ exports.updateRideCommissionRates = onCall(async (request) => {
 });
 
 /**
+ * RIDE OPERATIONS SETTINGS: Super Admin only.
+ * These values are centrally stored for the ride-pricing/dispatch rollout.
+ * Existing production flows must be migrated to consume each field before
+ * the corresponding operational feature is considered live.
+ */
+exports.updateRideOperationsSettings = onCall(async (request) => {
+  const actorUid = requireSuperAdmin(request);
+  const input = request.data || {};
+  const numeric = (key, min, max) => {
+    const value = Number(input[key]);
+    if (!Number.isFinite(value) || value < min || value > max) {
+      throw new HttpsError("invalid-argument", key + " এর মান " + min + " থেকে " + max + " এর মধ্যে দিন।");
+    }
+    return value;
+  };
+  const settings = {
+    bikeBaseFare: money(numeric("bikeBaseFare", 0, 10000)),
+    bikePerKm: money(numeric("bikePerKm", 0, 1000)),
+    carBaseFare: money(numeric("carBaseFare", 0, 20000)),
+    carPerKm: money(numeric("carPerKm", 0, 2000)),
+    minimumFare: money(numeric("minimumFare", 0, 10000)),
+    requestTimeoutSeconds: Math.round(numeric("requestTimeoutSeconds", 10, 180)),
+    driverSearchRadiusKm: Number(numeric("driverSearchRadiusKm", 1, 50).toFixed(1)),
+    surgeEnabled: input.surgeEnabled === true,
+    surgeMultiplier: Number(numeric("surgeMultiplier", 1, 5).toFixed(2)),
+    liveGpsEnabled: input.liveGpsEnabled === true,
+    sosEnabled: input.sosEnabled === true,
+    updatedBy: actorUid,
+    updatedAt: FieldValue.serverTimestamp()
+  };
+  const ref = db.collection("platformSettings").doc("rideOperations");
+  const previousSnap = await ref.get();
+  const previous = previousSnap.exists ? previousSnap.data() : null;
+  await ref.set(settings, { merge: true });
+  await db.collection("adminAuditLogs").add({
+    actorUid,
+    action: "ride_operations_settings_updated",
+    previous: previous ? {
+      bikeBaseFare: previous.bikeBaseFare ?? null,
+      bikePerKm: previous.bikePerKm ?? null,
+      carBaseFare: previous.carBaseFare ?? null,
+      carPerKm: previous.carPerKm ?? null,
+      minimumFare: previous.minimumFare ?? null,
+      requestTimeoutSeconds: previous.requestTimeoutSeconds ?? null,
+      driverSearchRadiusKm: previous.driverSearchRadiusKm ?? null,
+      surgeEnabled: previous.surgeEnabled ?? null,
+      surgeMultiplier: previous.surgeMultiplier ?? null,
+      liveGpsEnabled: previous.liveGpsEnabled ?? null,
+      sosEnabled: previous.sosEnabled ?? null
+    } : null,
+    values: settings,
+    createdAt: FieldValue.serverTimestamp()
+  });
+  return { success: true, settings };
+});
+
+/**
  * Passenger requests a short-lived completion OTP.
  * The passenger shares this code with the assigned driver only after the trip.
  */
