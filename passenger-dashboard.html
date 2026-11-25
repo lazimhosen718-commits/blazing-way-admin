@@ -757,7 +757,9 @@ bookingBtn.addEventListener("click",async()=>{
  try{
 
   let pickupGps = null;
-  if (navigator.geolocation) {
+  const useCurrentGps = navigator.geolocation
+   && window.confirm("আপনার লেখা Pickup স্থানটি কি আপনার বর্তমান অবস্থান? বর্তমান GPS-কে Pickup হিসেবে ব্যবহার করতে OK চাপুন। অন্য স্থান হলে Cancel চাপুন।");
+  if (useCurrentGps) {
    try {
     pickupGps = await new Promise((resolve, reject) => {
      navigator.geolocation.getCurrentPosition(
