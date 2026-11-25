@@ -756,6 +756,21 @@ bookingBtn.addEventListener("click",async()=>{
 
  try{
 
+  let pickupGps = null;
+  if (navigator.geolocation) {
+   try {
+    pickupGps = await new Promise((resolve, reject) => {
+     navigator.geolocation.getCurrentPosition(
+      pos => resolve({lat:pos.coords.latitude,lng:pos.coords.longitude}),
+      reject,
+      {enableHighAccuracy:true,maximumAge:30000,timeout:10000}
+     );
+    });
+   } catch (gpsError) {
+    console.warn("Pickup GPS unavailable; dispatch will use fallback mode.",gpsError);
+   }
+  }
+
   const bookingData={
    passengerId:auth.currentUser.uid,
    pickup:pickup,
@@ -763,6 +778,7 @@ bookingBtn.addEventListener("click",async()=>{
    vehicleType:result.vehicle,
    distanceKm:result.distance,
    estimatedFare:result.total,
+   ...(pickupGps ? {pickupLat:pickupGps.lat,pickupLng:pickupGps.lng} : {}),
    status:"pending",
    createdAt:serverTimestamp()
   };
@@ -778,7 +794,7 @@ bookingBtn.addEventListener("click",async()=>{
    const dispatch=await httpsCallable(functions,"dispatchRideRequest")({rideId:bookingRef.id});
    bookingMessage.style.color="green";
    bookingMessage.textContent=dispatch.data.offersSent>0
-    ? "Ride Request "+dispatch.data.offersSent+" জন Online Driver-এর কাছে পাঠানো হয়েছে। প্রথম Accept করা Driver Ride পাবেন। Booking: "+bookingRef.id
+    ? (dispatch.data.dispatchMode==="nearest_gps" ? "নিকটতম "+dispatch.data.offersSent+" জন উপযুক্ত Driver-এর কাছে Request পাঠানো হয়েছে। প্রথম Accept করা Driver Ride পাবেন। Booking: " : "Pickup GPS না থাকায় উপযুক্ত Online Driver-দের কাছে Request পাঠানো হয়েছে। Booking: ")+bookingRef.id
     : "Booking হয়েছে, কিন্তু এখন কোনো উপযুক্ত Online Driver পাওয়া যায়নি। পরে আবার চেষ্টা করুন। Booking: "+bookingRef.id;
   }catch(dispatchError){
    console.error("Ride dispatch failed:",dispatchError);
