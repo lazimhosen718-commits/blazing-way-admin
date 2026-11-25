@@ -640,7 +640,9 @@ onAuthStateChanged(auth,async user=>{
    if(adminSnap.exists()){
     const adminData=adminSnap.data();
     if(adminData.status==="active"){
-     currentAdminRoles=Array.isArray(adminData.roles)?adminData.roles:(adminData.role?[adminData.role]:[]);
+     // This panel assigns exactly one primary role per Service Admin.
+     // Prefer the canonical role field so stale/extra roles cannot widen access.
+     currentAdminRoles=adminData.role?[adminData.role]:(Array.isArray(adminData.roles)?adminData.roles:[]);
     }
    }
   }
