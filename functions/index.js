@@ -106,45 +106,90 @@ exports.updateRideOperationsSettings = onCall(async (request) => {
  * Broadcast a newly created ride to online, approved drivers of matching vehicle type.
  * The first driver to accept wins through a Firestore transaction.
  */
+
+function rideDistanceKm(aLat,aLng,bLat,bLng) {
+  const rad = value => value * Math.PI / 180;
+  const dLat = rad(bLat - aLat), dLng = rad(bLng - aLng);
+  const x = Math.sin(dLat / 2) ** 2
+    + Math.cos(rad(aLat)) * Math.cos(rad(bLat)) * Math.sin(dLng / 2) ** 2;
+  return 6371 * 2 * Math.atan2(Math.sqrt(x), Math.sqrt(1 - x));
+}
+
 exports.dispatchRideRequest = onCall(async (request) => {
   const passengerId = requireUser(request);
   const rideId = String(request.data?.rideId || "").trim();
   if (!rideId) throw new HttpsError("invalid-argument", "Ride ID প্রয়োজন।");
   const rideRef = db.collection("rideBookings").doc(rideId);
-  const rideSnap = await rideRef.get();
+  const [rideSnap, settingsSnap] = await Promise.all([
+    rideRef.get(),
+    db.collection("platformSettings").doc("rideOperations").get()
+  ]);
   if (!rideSnap.exists) throw new HttpsError("not-found", "Ride পাওয়া যায়নি।");
   const ride = rideSnap.data();
   if (ride.passengerId !== passengerId) throw new HttpsError("permission-denied", "এটি আপনার Ride নয়।");
   if (ride.status !== "pending" || ride.driverId) throw new HttpsError("failed-precondition", "Ride আর Dispatch করা যাবে না।");
 
+  const settings = settingsSnap.exists ? settingsSnap.data() : {};
+  const radiusKm = Math.max(1, Math.min(50, Number(settings.driverSearchRadiusKm ?? 5)));
+  const hasPickupGps = Number.isFinite(ride.pickupLat) && Number.isFinite(ride.pickupLng);
   const presenceSnap = await db.collection("driverPresence").where("online", "==", true).get();
   const eligible = [];
   for (const presence of presenceSnap.docs) {
     const driverId = presence.id;
     const p = presence.data();
     if (driverId === passengerId || typeof p.lat !== "number" || typeof p.lng !== "number") continue;
+    const updatedMs = p.updatedAt?.toMillis ? p.updatedAt.toMillis() : 0;
+    if (!updatedMs || Date.now() - updatedMs > 120000) continue;
     const profileSnap = await db.collection("driverApplications").doc(driverId).get();
     if (!profileSnap.exists) continue;
     const profile = profileSnap.data();
     if (profile.status !== "approved" || profile.vehicleType !== ride.vehicleType) continue;
-    eligible.push({ driverId, driverName: profile.fullName || "Driver" });
+    const distanceKm = hasPickupGps
+      ? rideDistanceKm(ride.pickupLat, ride.pickupLng, p.lat, p.lng)
+      : null;
+    if (hasPickupGps && distanceKm > radiusKm) continue;
+    eligible.push({ driverId, driverName: profile.fullName || "Driver", distanceKm });
   }
-  if (!eligible.length) return { success: true, offersSent: 0, message: "এখন কোনো উপযুক্ত Online Driver পাওয়া যায়নি।" };
+  eligible.sort((a,b) => {
+    if (a.distanceKm === null) return 0;
+    if (b.distanceKm === null) return 0;
+    return a.distanceKm - b.distanceKm;
+  });
+  const selected = eligible.slice(0, 5);
+  if (!selected.length) return {
+    success: true, offersSent: 0,
+    message: hasPickupGps
+      ? "নির্ধারিত Search Radius-এর মধ্যে কোনো সক্রিয় উপযুক্ত Driver পাওয়া যায়নি।"
+      : "সাম্প্রতিক GPS-সহ কোনো উপযুক্ত Online Driver পাওয়া যায়নি।"
+  };
 
   const batch = db.batch();
-  for (const driver of eligible.slice(0, 100)) {
+  for (const driver of selected) {
     const offerRef = db.collection("rideOffers").doc(rideId + "_" + driver.driverId);
     batch.set(offerRef, {
       rideId, driverId: driver.driverId, passengerId,
       vehicleType: ride.vehicleType, pickup: ride.pickup,
       destination: ride.destination, distanceKm: ride.distanceKm,
-      estimatedFare: ride.estimatedFare, status: "pending",
+      estimatedFare: ride.estimatedFare,
+      driverDistanceKm: driver.distanceKm,
+      status: "pending",
       createdAt: FieldValue.serverTimestamp()
     });
   }
-  batch.update(rideRef, { dispatchStartedAt: FieldValue.serverTimestamp(), dispatchOfferCount: Math.min(eligible.length, 100) });
+  batch.update(rideRef, {
+    dispatchStartedAt: FieldValue.serverTimestamp(),
+    dispatchOfferCount: selected.length,
+    dispatchRadiusKm: radiusKm,
+    dispatchMode: hasPickupGps ? "nearest_gps" : "gps_unavailable_fallback"
+  });
   await batch.commit();
-  return { success: true, offersSent: Math.min(eligible.length, 100) };
+  return {
+    success: true, offersSent: selected.length,
+    dispatchMode: hasPickupGps ? "nearest_gps" : "gps_unavailable_fallback",
+    message: hasPickupGps
+      ? "নিকটতম উপযুক্ত Driver-দের কাছে Request পাঠানো হয়েছে।"
+      : "Pickup GPS না থাকায় নিকটতম অনুযায়ী সাজানো সম্ভব হয়নি।"
+  };
 });
 
 exports.acceptRideOffer = onCall(async (request) => {
