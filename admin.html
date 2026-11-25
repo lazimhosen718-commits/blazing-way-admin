@@ -577,7 +577,7 @@ function applyAdminRoleVisibility(){
  ["commissionSettings","rideOperationsSettings","adminAccountManagement"].forEach(id=>setCardVisible(id,currentIsSuperAdmin));
  setCardVisible("driverPaymentManagement",finance);
  setCardVisible("passengerDepositApproval",finance);
- setCardVisible("foodDeliverySummary",currentIsSuperAdmin);
+ setCardVisible("foodDeliverySummary",currentIsSuperAdmin||food||foodRider);
  setCardVisible("foodCustomerSummary",food);
  setCardVisible("merchantSummary",food);
  setCardVisible("foodRiderSummary",foodRider);
