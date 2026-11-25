@@ -259,6 +259,17 @@ button:disabled{opacity:.6;cursor:not-allowed}
 <p id="bookingMessage" class="small"></p>
 </div>
 
+<!-- FOOD DELIVERY: SAME PASSENGER DASHBOARD -->
+<div class="card" id="foodSection" style="display:none">
+ <h2>🍔 Food Delivery</h2><p class="small">একই Customer Account দিয়ে খাবার বেছে Cart-এ যোগ করে অর্ডার করুন।</p>
+ <button type="button" id="foodBackBtn" style="background:#475569">Ride Services-এ ফিরুন</button>
+ <h3>রেস্টুরেন্টের খাবার</h3><div id="foodMenuList">Menu লোড হচ্ছে...</div>
+ <h3>আপনার Cart</h3><div id="foodCartList">কার্ট খালি।</div><p id="foodCartTotal" style="font-weight:bold;color:#087443"></p>
+ <label>ডেলিভারি ঠিকানা</label><input id="foodAddress" type="text" placeholder="সম্পূর্ণ ডেলিভারি ঠিকানা">
+ <label>মোবাইল নম্বর</label><input id="foodPhone" type="tel" inputmode="numeric" placeholder="01XXXXXXXXX">
+ <button type="button" id="foodPlaceOrderBtn">অর্ডার Confirm করুন</button><p id="foodMessage" class="small"></p>
+ <h3>আমার Food Orders</h3><button type="button" id="foodOrdersRefresh" style="background:#475569">অর্ডার Refresh</button><div id="foodOrdersList">অর্ডার লোড হচ্ছে...</div>
+</div>
 <!-- MY BOOKINGS -->
 <div class="card">
 <h2>🚕 আমার বুকিংসমূহ</h2>
@@ -300,6 +311,7 @@ import {
  onSnapshot as firestoreOnSnapshot,
  query,
  where,
+ getDocs,
  onSnapshot
 } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-firestore.js";
 
@@ -417,18 +429,14 @@ document.querySelectorAll(".service").forEach(button=>{
     "Bike Ride নির্বাচন করা হয়েছে।":
     "Private Car Ride নির্বাচন করা হয়েছে।";
 
+  }else if(service==="food"){
+   document.getElementById("rideSection").style.display="none";
+   document.getElementById("foodSection").style.display="block";
+   document.getElementById("foodSection").scrollIntoView({behavior:"smooth"});
+   loadFoodMenu();loadFoodOrders();
   }else{
-
-   const names={
-    food:"Food Delivery",
-    parcel:"Parcel",
-    courier:"Courier",
-    pay:"BLAZING-WAY Pay",
-    offers:"Points & Offers"
-   };
-
+   const names={parcel:"Parcel",courier:"Courier",pay:"BLAZING-WAY Pay",offers:"Points & Offers"};
    alert(names[service]+" সার্ভিসটি শিগগিরই চালু হবে।");
-
   }
 
  });
@@ -630,6 +638,67 @@ function loadMyBookings(uid){
 
 }
 
+
+let foodCart=new Map(),foodMerchantId="";
+function foodSay(message,ok=false){const el=document.getElementById("foodMessage");el.textContent=message;el.style.color=ok?"#087443":"#b42318";}
+async function loadFoodMenu(){
+ const box=document.getElementById("foodMenuList");box.textContent="Menu লোড হচ্ছে...";
+ try{
+  const snap=await getDocs(query(collection(db,"foodMenuItems"),where("available","==",true)));
+  box.innerHTML="";
+  if(snap.empty){box.textContent="এখনো কোনো খাবার যোগ করা হয়নি।";return;}
+  snap.forEach(d=>{const x=d.data(),el=document.createElement("div");el.className="booking-item";
+   const h=document.createElement("h3");h.textContent=x.itemName||"খাবার";
+   const p=document.createElement("p");p.textContent=(x.merchantName||"Merchant")+" • "+(x.description||"");
+   const price=document.createElement("b");price.textContent="৳"+x.price;
+   const b=document.createElement("button");b.textContent="কার্টে যোগ করুন";b.onclick=()=>addFoodItem(d.id,x);
+   el.append(h,p,price,b);box.append(el);
+  });
+ }catch(e){box.textContent="Menu লোড করা যায়নি: "+e.message;}
+}
+function addFoodItem(id,x){
+ if(foodMerchantId&&foodMerchantId!==x.merchantId){alert("একটি অর্ডারে এক Merchant-এর খাবার যোগ করা যাবে। আগে Cart খালি করুন।");return;}
+ foodMerchantId=x.merchantId;const old=foodCart.get(id)||{itemId:id,itemName:x.itemName,price:Number(x.price),quantity:0};
+ old.quantity++;foodCart.set(id,old);renderFoodCart();
+}
+function renderFoodCart(){
+ const box=document.getElementById("foodCartList");box.innerHTML="";
+ if(!foodCart.size){box.textContent="কার্ট খালি।";document.getElementById("foodCartTotal").textContent="";return;}
+ let total=0;foodCart.forEach(x=>{total+=x.price*x.quantity;const el=document.createElement("div");el.className="booking-item";
+ el.textContent=x.itemName+" × "+x.quantity+" = ৳"+(x.price*x.quantity);
+ const b=document.createElement("button");b.textContent="একটি কমান";b.style.background="#475569";b.onclick=()=>{x.quantity--;if(x.quantity<=0)foodCart.delete(x.itemId);if(!foodCart.size)foodMerchantId="";renderFoodCart();};
+ el.append(b);box.append(el);});
+ document.getElementById("foodCartTotal").textContent="খাবারের মোট: ৳"+total;
+}
+async function loadFoodOrders(){
+ const box=document.getElementById("foodOrdersList");box.textContent="অর্ডার লোড হচ্ছে...";
+ try{const snap=await getDocs(query(collection(db,"foodOrders"),where("customerId","==",auth.currentUser.uid)));
+ box.innerHTML="";if(snap.empty){box.textContent="এখনো কোনো Food Order নেই।";return;}
+ snap.forEach(d=>{const x=d.data(),el=document.createElement("div");el.className="booking-item";
+ const h=document.createElement("b");h.textContent=(x.merchantName||"Merchant")+" — ৳"+x.subtotal;
+ const p=document.createElement("p");p.textContent="Order: "+d.id+" | Status: "+x.status+" | "+(x.items||[]).map(i=>i.itemName+" × "+i.quantity).join(", ");
+ el.append(h,p);box.append(el);});
+ }catch(e){box.textContent="অর্ডার লোড করা যায়নি: "+e.message;}
+}
+document.getElementById("foodBackBtn").onclick=()=>{
+ document.getElementById("foodSection").style.display="none";document.getElementById("rideSection").style.display="block";
+ document.querySelector('[data-service="bike"]').classList.add("active");document.querySelector('[data-service="food"]').classList.remove("active");
+ document.getElementById("rideSection").scrollIntoView({behavior:"smooth"});
+};
+document.getElementById("foodOrdersRefresh").onclick=loadFoodOrders;
+document.getElementById("foodPlaceOrderBtn").onclick=async()=>{
+ if(!foodCart.size){foodSay("প্রথমে খাবার Cart-এ যোগ করুন।");return;}
+ const address=document.getElementById("foodAddress").value.trim(),phone=document.getElementById("foodPhone").value.trim();
+ if(!address||!/^01[3-9][0-9]{8}$/.test(phone)){foodSay("সম্পূর্ণ ঠিকানা ও সঠিক বাংলাদেশি মোবাইল নম্বর দিন।");return;}
+ const b=document.getElementById("foodPlaceOrderBtn");b.disabled=true;
+ try{
+  const call=httpsCallable(functions,"placeFoodOrder");
+  const r=await call({merchantId:foodMerchantId,deliveryAddress:address,customerPhone:phone,items:[...foodCart.values()].map(x=>({itemId:x.itemId,quantity:x.quantity}))});
+  foodCart.clear();foodMerchantId="";renderFoodCart();
+  foodSay("অর্ডার সফল! Order ID: "+r.data.orderId+" | মোট ৳"+r.data.subtotal,true);await loadFoodOrders();
+ }catch(e){foodSay(e.message||"অর্ডার করা যায়নি।");}finally{b.disabled=false;}
+};
+
 // AUTHENTICATION
 onAuthStateChanged(auth,async(user)=>{
 
@@ -656,6 +725,10 @@ onAuthStateChanged(auth,async(user)=>{
   }
 
   const profile=profileSnap.data();
+  const foodProfileRef=doc(db,"foodCustomerProfiles",user.uid);
+  const foodProfileSnap=await getDoc(foodProfileRef);
+  if(!foodProfileSnap.exists()) await setDoc(foodProfileRef,{uid:user.uid,fullName:profile.fullName||user.displayName||"Customer",email:user.email,phone:profile.phone||"",role:"food_customer",createdAt:serverTimestamp()});
+  document.getElementById("foodPhone").value=profile.phone||"";
 
   nameBox.textContent="নাম: "+profile.fullName;
   emailBox.textContent="Gmail: "+profile.email;
