@@ -553,7 +553,8 @@ service cloud.firestore {
     }
 
     match /platformSettings/{settingId} {
-      allow read: if isSuperAdmin();
+      // Customers need published ride pricing only; commission and private settings remain Super Admin-only.
+      allow read: if isSuperAdmin() || (signedIn() && settingId == 'rideOperations');
       allow create, update, delete: if false;
     }
 
