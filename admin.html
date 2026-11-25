@@ -71,7 +71,7 @@ button:disabled{opacity:.5;cursor:not-allowed}
   <div><label>Temporary Password (কমপক্ষে ৮ অক্ষর)</label><input id="newAdminPassword" type="password" placeholder="Password"></div>
   <div><label>দায়িত্ব নির্বাচন</label><select id="newAdminRole">
    <option value="ride">Ride Admin</option><option value="food">Food Admin</option>
-   <option value="food_rider">Food Rider Admin</option><option value="finance">Finance Admin</option>
+   <option value="food_rider">Food Rider Admin</option>
    <option value="support">Customer Support Admin</option><option value="system">System Admin</option>
   </select></div>
  </div>
@@ -525,7 +525,7 @@ function loadAdminAccounts(){
    ]);
    if(d.status!=="disabled"){
     const roleSelect=document.createElement("select");
-    ["ride","food","food_rider","finance","support","system"].forEach(role=>{
+    ["ride","food","food_rider","support","system"].forEach(role=>{
      const option=document.createElement("option");option.value=role;option.textContent=role;option.selected=role===d.role;roleSelect.appendChild(option);
     });
     const change=document.createElement("button");change.textContent="Role পরিবর্তন";change.onclick=async()=>{
@@ -571,12 +571,13 @@ function applyAdminRoleVisibility(){
  const ride=currentIsSuperAdmin||currentAdminRoles.includes("ride");
  const food=currentIsSuperAdmin||currentAdminRoles.includes("food");
  const foodRider=currentIsSuperAdmin||currentAdminRoles.includes("food_rider");
- const finance=currentIsSuperAdmin||currentAdminRoles.includes("finance");
+ const rideFinance=currentIsSuperAdmin||currentAdminRoles.includes("ride");
+ const foodFinance=currentIsSuperAdmin||currentAdminRoles.includes("food");
 
  ["driverApplicationsSummary","passengerManagementSummary","rideMonitoringSummary","onlineDriversCard","driverApplicationsCard","rideBookingsCard"].forEach(id=>setCardVisible(id,ride));
  ["commissionSettings","rideOperationsSettings","adminAccountManagement"].forEach(id=>setCardVisible(id,currentIsSuperAdmin));
- setCardVisible("driverPaymentManagement",finance);
- setCardVisible("passengerDepositApproval",finance);
+ setCardVisible("driverPaymentManagement",rideFinance);
+ setCardVisible("passengerDepositApproval",rideFinance);
  setCardVisible("foodDeliverySummary",currentIsSuperAdmin||food||foodRider);
  setCardVisible("foodCustomerSummary",food);
  setCardVisible("merchantSummary",food);
@@ -586,7 +587,7 @@ function applyAdminRoleVisibility(){
  setCardVisible("merchantManagement",food);
  setCardVisible("foodRiderManagement",foodRider);
  setCardVisible("foodOrderMonitoring",food||foodRider);
- setCardVisible("foodWalletReport",finance);
+ setCardVisible("foodWalletReport",foodFinance);
 
  const welcome=document.querySelector("#dashboard > .card h2");
  if(welcome)welcome.textContent=currentIsSuperAdmin?"স্বাগতম, Super Admin!":"স্বাগতম, Service Admin!";
@@ -654,14 +655,14 @@ onAuthStateChanged(auth,async user=>{
    if(currentIsSuperAdmin || currentAdminRoles.includes("ride")){
     loadApplications();loadOnlineDrivers();loadRideBookings();
    }
-   if(currentIsSuperAdmin || currentAdminRoles.includes("finance")){
+   if(currentIsSuperAdmin || currentAdminRoles.includes("ride")){
     loadPayments();loadDepositRequests();loadFinanceRideData();loadRideCommissionSettings();
    }
    if(currentIsSuperAdmin || currentAdminRoles.includes("food") || currentAdminRoles.includes("food_rider")){
     loadFoodDeliveryAdmin({
      food:currentIsSuperAdmin||currentAdminRoles.includes("food"),
      foodRider:currentIsSuperAdmin||currentAdminRoles.includes("food_rider"),
-     finance:currentIsSuperAdmin||currentAdminRoles.includes("finance")
+     finance:currentIsSuperAdmin||currentAdminRoles.includes("food")
     });
    }
    if(currentIsSuperAdmin){loadAdminAccounts();loadRideCommissionSettings();loadRideOperationsSettings();}
