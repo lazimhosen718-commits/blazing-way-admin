@@ -607,8 +607,10 @@ document.querySelectorAll(".service").forEach(button=>{
    document.getElementById("foodSection").style.display="block";
    document.getElementById("foodSection").scrollIntoView({behavior:"smooth"});
    loadFoodMenu();loadFoodOrders();
+  }else if(service==="offers"){
+   openCustomerTab("offers");
   }else{
-   const names={parcel:"Parcel",courier:"Courier",pay:"BLAZING-WAY Pay",offers:"Points & Offers"};
+   const names={parcel:"Parcel",courier:"Courier",pay:"BLAZING-WAY Pay"};
    alert(names[service]+" সার্ভিসটি শিগগিরই চালু হবে।");
   }
 
