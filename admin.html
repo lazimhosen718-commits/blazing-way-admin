@@ -1164,9 +1164,12 @@ function renderRideBookings(docs){
    complete.onclick=async()=>{
 
     if(!confirm(
-     "এই Ride কি সত্যিই সম্পন্ন হয়েছে?\n\n"+
+     "এই Ride কি সত্যিই সম্পন্ন হয়েছে?
+
+"+
      "ভাড়া: ৳"+(d.estimatedFare||0)+
-     "\nBLAZING-WAY-এর কমিশন: ৳"+
+     "
+BLAZING-WAY-এর কমিশন: ৳"+
      Number(d.platformCommission??(Number(d.actualFare??d.estimatedFare??0)*getRideCommissionRate(d.vehicleType)))
     ))return;
 
@@ -1557,9 +1560,12 @@ $("savePaymentBtn").onclick=async()=>{
 
  if(!confirm(
   driver.name+"-কে ৳"+money(amount)+
-  " Payment হিসাবে Save করবেন?\n\n"+
+  " Payment হিসাবে Save করবেন?
+
+"+
   "পদ্ধতি: "+method+
-  "\nReference: "+reference
+  "
+Reference: "+reference
  ))return;
 
  button.disabled=true;
@@ -1747,7 +1753,9 @@ async function reviewDeposit(requestId,status,approveButton,rejectButton){
  }
 
  const prompt=status==="approved"
-  ? "৳"+money(amount)+" কি Passenger Wallet-এ যোগ করবেন?\n\nTransaction ID: "+(d.transactionId||"")
+  ? "৳"+money(amount)+" কি Passenger Wallet-এ যোগ করবেন?
+
+Transaction ID: "+(d.transactionId||"")
   : "এই Deposit Request Reject করবেন?";
  if(!confirm(prompt))return;
 
