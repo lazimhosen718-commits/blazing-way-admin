@@ -109,6 +109,28 @@ button:disabled{opacity:.5;cursor:not-allowed}
 <p id="commissionInfo">লোড হচ্ছে...</p>
 </div>
 
+<div class="card" id="rideOperationsSettings">
+<h3>Ride Operations Settings — Super Admin</h3>
+<p class="small">এখানকার পরিবর্তন শুধু Super Admin করতে পারবেন। ভাড়া ও অপারেশনাল সীমা সংরক্ষিত হবে; GPS, SOS ও Auto-Dispatch-এর কার্যকর সংযোগ আলাদাভাবে সম্পন্ন করতে হবে।</p>
+<div class="grid">
+ <div><label>Bike Base Fare (৳)</label><input id="rideBikeBaseFare" type="number" min="0" max="10000" step="1" value="30"></div>
+ <div><label>Bike প্রতি KM (৳)</label><input id="rideBikePerKm" type="number" min="0" max="1000" step="1" value="12"></div>
+ <div><label>Car Base Fare (৳)</label><input id="rideCarBaseFare" type="number" min="0" max="20000" step="1" value="60"></div>
+ <div><label>Car প্রতি KM (৳)</label><input id="rideCarPerKm" type="number" min="0" max="2000" step="1" value="20"></div>
+ <div><label>Minimum Fare (৳)</label><input id="rideMinimumFare" type="number" min="0" max="10000" step="1" value="30"></div>
+ <div><label>Driver Request Timeout (সেকেন্ড)</label><input id="rideRequestTimeout" type="number" min="10" max="180" step="1" value="30"></div>
+ <div><label>Driver Search Radius (KM)</label><input id="rideSearchRadius" type="number" min="1" max="50" step="0.5" value="5"></div>
+ <div><label>Surge Multiplier</label><input id="rideSurgeMultiplier" type="number" min="1" max="5" step="0.1" value="1"></div>
+</div>
+<div class="grid">
+ <label><input id="rideSurgeEnabled" type="checkbox"> Surge Pricing চালু</label>
+ <label><input id="rideGpsEnabled" type="checkbox" checked> Live GPS চালু</label>
+ <label><input id="rideSosEnabled" type="checkbox" checked> SOS চালু</label>
+</div>
+<button id="saveRideOperationsSettings" class="approveBtn">Ride Settings সংরক্ষণ করুন</button>
+<p id="rideOperationsSettingsMessage" class="small">ডিফল্ট মান দেখানো হচ্ছে। Firebase থেকে লোড হলে বর্তমান মান আসবে।</p>
+</div>
+
 </div>
 
 <div class="card">
@@ -313,7 +335,7 @@ let stopMerchantWallets=null;
 let stopFoodRiderWallets=null;
 let stopFoodLedger=null;
 let stopAdminAccounts=null;
-let stopCommissionSettings=null;
+let stopCommissionSettings=null;\nlet stopRideOperationsSettings=null;
 let currentAdminRoles=[];
 let currentIsSuperAdmin=false;
 
@@ -363,6 +385,54 @@ function loadRideCommissionSettings(){
   $("commissionSettingsMessage").textContent="কমিশন সেটিংস পড়া যায়নি: "+error.code;
  });
 }
+
+function loadRideOperationsSettings(){
+ if(stopRideOperationsSettings)stopRideOperationsSettings();
+ stopRideOperationsSettings=onSnapshot(doc(db,"platformSettings","rideOperations"),snapshot=>{
+  const s=snapshot.exists()?snapshot.data():{};
+  $("rideBikeBaseFare").value=s.bikeBaseFare??30;
+  $("rideBikePerKm").value=s.bikePerKm??12;
+  $("rideCarBaseFare").value=s.carBaseFare??60;
+  $("rideCarPerKm").value=s.carPerKm??20;
+  $("rideMinimumFare").value=s.minimumFare??30;
+  $("rideRequestTimeout").value=s.requestTimeoutSeconds??30;
+  $("rideSearchRadius").value=s.driverSearchRadiusKm??5;
+  $("rideSurgeMultiplier").value=s.surgeMultiplier??1;
+  $("rideSurgeEnabled").checked=s.surgeEnabled===true;
+  $("rideGpsEnabled").checked=s.liveGpsEnabled!==false;
+  $("rideSosEnabled").checked=s.sosEnabled!==false;
+  $("rideOperationsSettingsMessage").textContent="Ride Settings Firebase থেকে লোড হয়েছে।";
+ },error=>{
+  console.error(error);
+  $("rideOperationsSettingsMessage").textContent="Settings লোড হয়নি: "+error.code;
+ });
+}
+
+$("saveRideOperationsSettings").onclick=async()=>{
+ const button=$("saveRideOperationsSettings");
+ const values={
+  bikeBaseFare:Number($("rideBikeBaseFare").value),
+  bikePerKm:Number($("rideBikePerKm").value),
+  carBaseFare:Number($("rideCarBaseFare").value),
+  carPerKm:Number($("rideCarPerKm").value),
+  minimumFare:Number($("rideMinimumFare").value),
+  requestTimeoutSeconds:Number($("rideRequestTimeout").value),
+  driverSearchRadiusKm:Number($("rideSearchRadius").value),
+  surgeEnabled:$("rideSurgeEnabled").checked,
+  surgeMultiplier:Number($("rideSurgeMultiplier").value),
+  liveGpsEnabled:$("rideGpsEnabled").checked,
+  sosEnabled:$("rideSosEnabled").checked
+ };
+ button.disabled=true;
+ $("rideOperationsSettingsMessage").textContent="Settings সংরক্ষণ হচ্ছে...";
+ try{
+  await httpsCallable(functions,"updateRideOperationsSettings")(values);
+  $("rideOperationsSettingsMessage").textContent="Ride Settings সংরক্ষিত হয়েছে। Audit Log-এ পরিবর্তন নথিভুক্ত হয়েছে।";
+ }catch(error){
+  console.error(error);
+  $("rideOperationsSettingsMessage").textContent="সংরক্ষণ হয়নি: "+(error.message||error.code);
+ }finally{button.disabled=false;}
+};
 
 $("saveCommissionRates").onclick=async()=>{
  const bikePercent=Number($("bikeCommissionRate").value);
@@ -471,7 +541,7 @@ function applyAdminRoleVisibility(){
  ["foodRiders"].forEach(id=>hideAdminCardById(id,foodRider));
  ["foodOrders"].forEach(id=>hideAdminCardById(id,food||foodRider));
  ["depositRequests"].forEach(id=>hideAdminCardById(id,finance));
- ["adminAccountManagement","commissionSettings"].forEach(id=>hideAdminCardById(id,currentIsSuperAdmin));
+ ["adminAccountManagement","commissionSettings","rideOperationsSettings"].forEach(id=>hideAdminCardById(id,currentIsSuperAdmin));
  // Ride payment and Finance-only controls are not exposed to unrelated service admins.
  const headings=[...document.querySelectorAll("h2")];
  headings.forEach(h=>{
@@ -537,7 +607,7 @@ onAuthStateChanged(auth,async user=>{
    if(currentIsSuperAdmin || currentAdminRoles.includes("food") || currentAdminRoles.includes("food_rider")){
     loadFoodDeliveryAdmin();
    }
-   if(currentIsSuperAdmin){loadAdminAccounts();loadRideCommissionSettings();}
+   if(currentIsSuperAdmin){loadAdminAccounts();loadRideCommissionSettings();loadRideOperationsSettings();}
   }else{
    await signOut(auth);
    $("login").style.display="block";
