@@ -143,6 +143,36 @@ button:disabled{opacity:.6;cursor:not-allowed}
  font-size:13px;
  line-height:1.6;
 }
+/* Pathao-inspired customer home */
+body{background:#fff;color:#202a31;padding-bottom:84px}
+header{background:#fff;color:#18232b;text-align:left;padding:17px 20px;border-bottom:1px solid #edf0f2;position:sticky;top:0;z-index:20}
+header h1{font-size:25px;letter-spacing:-1px}header p{margin:4px 0 0;color:#64717a;font-size:13px}
+main{max-width:760px;margin:0 auto;padding:8px 14px 28px}
+.card{border-radius:18px;box-shadow:none;border:0;padding:16px;margin:10px 0 18px}
+#passengerName,#passengerEmail{margin:4px 0;color:#65717a;font-size:13px}
+#gpsStatus{background:#f3f6f8;border:0;color:#46535c}
+#gpsRetryBtn{width:auto;padding:9px 14px;font-size:13px}
+.services-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.service{position:relative;text-align:left;min-height:132px;padding:16px;border:1px solid #edf0f2;border-radius:22px;background:#fff;box-shadow:0 2px 8px #0000000c}
+.service-icon{font-size:34px}.service strong{font-size:22px}.service small{font-size:13px;line-height:1.35}
+.service.active{border:1px solid #e33b3b;background:#fff8f8}
+input,select{border:1px solid #e5e8eb;border-radius:14px;background:#f6f7f8;padding:15px}
+button{border-radius:14px}
+.home-search{background:#f5f6f7;border:1px solid #e8eaec;border-radius:18px;padding:12px 15px;margin:12px 0 16px}
+.home-search input{margin:0;background:transparent;border:0;padding:6px}
+.quick-addresses{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.quick-address{border-radius:16px;background:#f5f6f7;padding:13px;font-size:14px;color:#27323a}
+.quick-address button{background:transparent;color:#27323a;padding:0;margin:0;text-align:left;font-weight:bold}
+.food-categories{display:grid;grid-template-columns:repeat(4,1fr);gap:5px;text-align:center;margin:14px 0}
+.food-category{border:0;background:white;color:#25313a;padding:7px 2px;font-size:13px}
+.food-category span{display:block;font-size:30px;margin-bottom:6px}
+.section-heading{font-size:23px;margin:20px 0 12px}
+#foodMenuList .booking-item,#myBookings .booking-item{background:#fff;border:1px solid #e9edf0;border-radius:15px}
+.bottom-nav{position:fixed;bottom:0;left:0;right:0;background:#fff;border-top:1px solid #e8ecef;display:grid;grid-template-columns:repeat(4,1fr);padding:7px 4px calc(7px + env(safe-area-inset-bottom));z-index:30}
+.bottom-nav button{background:transparent;color:#7c8790;margin:0;padding:6px 2px;font-size:12px;border-radius:8px}
+.bottom-nav button span{display:block;font-size:22px;margin-bottom:3px}
+.bottom-nav button.active{color:#e33b3b;font-weight:bold}
+@media(min-width:600px){main{padding-left:24px;padding-right:24px}.services-grid{grid-template-columns:repeat(3,1fr)}}
 </style>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin=""/>
 <style>
@@ -155,12 +185,25 @@ button:disabled{opacity:.6;cursor:not-allowed}
 
 <body>
 
-<header>
-<h1>BLAZING-WAY</h1>
-<p>Passenger Dashboard</p>
-</header>
-
+<header><h1>🔴 BLAZING-WAY</h1><p>এক অ্যাপে Ride • Food • Delivery</p></header>
 <main>
+<section class="card" id="homeIntro">
+<h2 style="font-size:24px;margin:4px 0 12px">Take a Ride</h2>
+<div class="home-search">📍 <input id="homeDestinationSearch" type="text" placeholder="Search destination"></div>
+<div class="quick-addresses">
+ <div class="quick-address">🏠 <button type="button" id="saveHomeBtn">Home ঠিকানা যোগ করুন</button></div>
+ <div class="quick-address">💼 <button type="button" id="saveWorkBtn">Work ঠিকানা যোগ করুন</button></div>
+</div>
+<p class="small" id="recentPlace">📍 GPS অবস্থান পাওয়া গেলে এখানে দেখাবে।</p>
+<h2 class="section-heading">Search for Food</h2>
+<div class="home-search">🔎 <input id="foodSearchHome" type="search" placeholder="Search for food"></div>
+<div class="food-categories">
+<button class="food-category" type="button" data-food-filter="Biryani"><span>🍛</span>Biryani</button>
+<button class="food-category" type="button" data-food-filter="Indian"><span>🥘</span>Indian</button>
+<button class="food-category" type="button" data-food-filter="Fast Food"><span>🍟</span>Fast Food</button>
+<button class="food-category" type="button" data-food-filter="Pizza"><span>🍕</span>Pizza</button>
+</div>
+</section>
 
 <div class="card">
 <h2>স্বাগতম!</h2>
@@ -174,8 +217,7 @@ button:disabled{opacity:.6;cursor:not-allowed}
 
 <!-- SERVICES -->
 <div class="card">
-<h2 class="section-title">🚀 আমাদের সার্ভিসসমূহ</h2>
-<p class="small">আপনার প্রয়োজন অনুযায়ী সার্ভিস নির্বাচন করুন।</p>
+<h2 class="section-title">আপনার সার্ভিস বেছে নিন</h2><p class="small">Ride, Food এবং Delivery একই অ্যাপে।</p>
 
 <div class="services-grid">
 
@@ -226,7 +268,7 @@ button:disabled{opacity:.6;cursor:not-allowed}
 
 <!-- RIDE BOOKING -->
 <div class="card" id="rideSection">
-<h2>🚕 আপনার যাত্রা পরিকল্পনা করুন</h2>
+<h2>🚕 Ride Booking</h2>
 
 <label>কোথা থেকে যাত্রা শুরু করবেন?</label>
 <input id="pickup" type="text" placeholder="যাত্রা শুরুর স্থান লিখুন">
@@ -265,7 +307,7 @@ button:disabled{opacity:.6;cursor:not-allowed}
 <div class="card" id="foodSection" style="display:none">
  <h2>🍔 Food Delivery</h2><p class="small">একই Customer Account দিয়ে খাবার বেছে Cart-এ যোগ করে অর্ডার করুন।</p>
  <button type="button" id="foodBackBtn" style="background:#475569">Ride Services-এ ফিরুন</button>
- <h3>রেস্টুরেন্টের খাবার</h3><div id="foodMenuList">Menu লোড হচ্ছে...</div>
+ <h3 class="section-heading">Trending Restaurants & Food</h3><div id="foodMenuList">Menu লোড হচ্ছে...</div>
  <h3>আপনার Cart</h3><div id="foodCartList">কার্ট খালি।</div><p id="foodCartTotal" style="font-weight:bold;color:#087443"></p>
  <label>ডেলিভারি ঠিকানা</label><input id="foodAddress" type="text" placeholder="সম্পূর্ণ ডেলিভারি ঠিকানা">
  <label>মোবাইল নম্বর</label><input id="foodPhone" type="tel" inputmode="numeric" placeholder="01XXXXXXXXX">
@@ -285,12 +327,17 @@ button:disabled{opacity:.6;cursor:not-allowed}
 <h3>ℹ️ BLAZING-WAY</h3>
 <p class="small">
 আমরা ধাপে ধাপে নতুন নতুন সার্ভিস যুক্ত করছি।
-Food, Parcel, Courier, Pay এবং Offers সার্ভিসগুলো এখনো চালু হয়নি।
+Food Delivery ও Ride বুকিং ব্যবহার করতে পারবেন। Parcel, Courier ও Pay ধাপে ধাপে চালু হবে।
 </p>
 </div>
 
 </main>
-
+<nav class="bottom-nav" aria-label="প্রধান মেনু">
+<button type="button" class="active" data-tab="home"><span>⌂</span>Home</button>
+<button type="button" data-tab="offers"><span>％</span>Offers</button>
+<button type="button" data-tab="activity"><span>▤</span>Activity</button>
+<button type="button" data-tab="inbox"><span>✉</span>Inbox</button>
+</nav>
 <script type="module">
 
 import {initializeApp} from "https://www.gstatic.com/firebasejs/12.0.0/firebase-app.js";
@@ -353,6 +400,7 @@ function requestAppLocation(){
  navigator.geolocation.getCurrentPosition(pos=>{
   currentGps={lat:pos.coords.latitude,lng:pos.coords.longitude};
   status.textContent="✅ GPS চালু হয়েছে। আপনার বর্তমান অবস্থান পাওয়া গেছে।";
+  document.getElementById("recentPlace").textContent="📍 GPS-এ আপনার বর্তমান অবস্থান পাওয়া গেছে।";
  },err=>{
   currentGps=null;
   status.textContent=err.code===1
@@ -363,6 +411,13 @@ function requestAppLocation(){
 document.getElementById("gpsRetryBtn").addEventListener("click",()=>{
  gpsRequested=false;requestAppLocation();
 });
+document.getElementById("homeDestinationSearch").addEventListener("change",e=>{const v=e.target.value.trim();if(v){document.getElementById("destination").value=v;document.getElementById("rideSection").scrollIntoView({behavior:"smooth"});}});
+document.getElementById("foodSearchHome").addEventListener("input",e=>{const q=e.target.value.trim().toLowerCase();document.querySelectorAll("#foodMenuList .booking-item").forEach(el=>el.style.display=el.textContent.toLowerCase().includes(q)?"":"none");});
+document.querySelectorAll("[data-food-filter]").forEach(b=>b.addEventListener("click",()=>{document.querySelector('[data-service="food"]').click();document.getElementById("foodSearchHome").value=b.dataset.foodFilter;loadFoodMenu().then(()=>{const q=b.dataset.foodFilter.toLowerCase();document.querySelectorAll("#foodMenuList .booking-item").forEach(el=>el.style.display=el.textContent.toLowerCase().includes(q)?"":"none");});}));
+document.getElementById("saveHomeBtn").onclick=()=>{const v=prompt("আপনার Home ঠিকানা লিখুন:");if(v){document.getElementById("pickup").value=v;document.getElementById("saveHomeBtn").textContent="Home: "+v;}};
+document.getElementById("saveWorkBtn").onclick=()=>{const v=prompt("আপনার Work ঠিকানা লিখুন:");if(v){document.getElementById("pickup").value=v;document.getElementById("saveWorkBtn").textContent="Work: "+v;}};
+document.querySelectorAll(".bottom-nav button").forEach(b=>b.addEventListener("click",()=>{document.querySelectorAll(".bottom-nav button").forEach(x=>x.classList.remove("active"));b.classList.add("active");const t=b.dataset.tab;if(t==="home")document.getElementById("homeIntro").scrollIntoView({behavior:"smooth"});else if(t==="activity")document.getElementById("myBookings").closest(".card").scrollIntoView({behavior:"smooth"});else if(t==="offers")alert("Offers শিগগিরই চালু হবে।");else if(t==="inbox")alert("Inbox শিগগিরই চালু হবে।");}));
+
 let ridePricingConfig={bikeBaseFare:30,bikePerKm:12,carBaseFare:60,carPerKm:20,minimumFare:30,surgeEnabled:false,surgeMultiplier:1};
 onSnapshot(doc(db,"platformSettings","rideOperations"),snapshot=>{
  const s=snapshot.exists()?snapshot.data():{};
