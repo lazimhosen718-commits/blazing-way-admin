@@ -287,7 +287,7 @@ Driver-এর আয় = সম্পন্ন ভাড়া − প্রযোজ
  <div id="foodRiders">লোড হচ্ছে...</div>
 </div>
 
-<div class="card" id="parcelRiderManagement" style="display:none"><h2>📦 Parcel Rider Applications</h2><p class="small">Parcel Rider আবেদন Approve/Reject/Suspend করুন।</p><div id="parcelRidersList">লোড হচ্ছে...</div></div>
+<div class="card" id="parcelRiderManagement" style="display:none"><h2>📦 Parcel Rider Applications</h2><p class="small">Parcel Rider আবেদন Approve/Reject/Suspend করুন।</p><div id="parcelRidersList">লোড হচ্ছে...</div><hr><h3>Parcel & Business Delivery Orders</h3><div id="parcelAdminOrders">লোড হচ্ছে...</div></div>
 
 <div class="card" id="foodOrderMonitoring">
  <h2>📦 Food Order Monitoring</h2>
@@ -711,25 +711,50 @@ onAuthStateChanged(auth,async user=>{
 
 
 
+
+let stopParcelRiders=null,stopParcelOrders=null,stopBusinessOrders=null;
 function loadParcelRiderApplications(){
- onSnapshot(collection(db,"parcelRiderProfiles"),snap=>{
+ if(stopParcelRiders)stopParcelRiders();
+ if(stopParcelOrders)stopParcelOrders();
+ if(stopBusinessOrders)stopBusinessOrders();
+ let riders=[];
+ stopParcelRiders=onSnapshot(collection(db,"parcelRiderProfiles"),snap=>{
+  riders=snap.docs.filter(d=>d.data().status==="approved").map(d=>({uid:d.id,name:d.data().fullName||d.data().phone||d.id}));
   const box=$("parcelRidersList");if(!box)return;box.replaceChildren();
   if(snap.empty){box.textContent="এখনো কোনো Parcel Rider আবেদন নেই।";return;}
   snap.forEach(d=>{
    const x=d.data(),card=document.createElement("div");card.className="application";
-   const info=document.createElement("p");info.textContent=(x.fullName||"")+" • "+(x.phone||"")+" • "+(x.status||"pending");
-   card.append(info);
+   const info=document.createElement("p");info.textContent=(x.fullName||"")+" • "+(x.phone||"")+" • "+(x.status||"pending");card.append(info);
    if(["pending","approved"].includes(x.status)){
     ["approved","rejected","suspended"].forEach(status=>{
      const b=document.createElement("button");b.textContent=status==="approved"?"Approve":status==="rejected"?"Reject":"Suspend";b.className=status==="approved"?"approveBtn":"rejectBtn";
      b.onclick=async()=>{b.disabled=true;try{await updateDoc(doc(db,"parcelRiderProfiles",d.id),{status,reviewedBy:auth.currentUser.uid,reviewedAt:serverTimestamp()});}catch(e){alert("পরিবর্তন হয়নি: "+e.message);}finally{b.disabled=false;}};
      card.append(b);
     });
-   }
-   box.append(card);
+   }box.append(card);
   });
- },err=>{const box=$("parcelRidersList");if(box)box.textContent="আবেদন লোড হয়নি: "+err.code;});
+  drawParcelOrders();
+ });
+ let parcelDocs=[],businessDocs=[];
+ function drawParcelOrders(){
+  const box=$("parcelAdminOrders");if(!box)return;box.replaceChildren();
+  const all=[...parcelDocs.map(d=>({d,type:"parcelOrders",label:"Parcel"})),...businessDocs.map(d=>({d,type:"businessDeliveryOrders",label:"Business Delivery"}))];
+  if(!all.length){box.textContent="এখনো কোনো বুকিং নেই।";return;}
+  all.forEach(({d,type,label})=>{
+   const x=d.data(),card=document.createElement("div");card.className="application";
+   const info=document.createElement("p");info.textContent=label+" • "+(x.pickupAddress||"")+" → "+(x.deliveryAddress||"")+" • "+x.status;card.append(info);
+   const select=document.createElement("select");select.innerHTML='<option value="">Approved Rider নির্বাচন</option>';
+   riders.forEach(r=>{const o=document.createElement("option");o.value=r.uid;o.textContent=r.name;select.append(o);});
+   if(x.assignedRiderId)select.value=x.assignedRiderId;
+   const assign=document.createElement("button");assign.textContent="Rider Assign করুন";assign.className="approveBtn";
+   assign.onclick=async()=>{if(!select.value){alert("Approved Rider নির্বাচন করুন।");return;}assign.disabled=true;try{await updateDoc(doc(db,type,d.id),{assignedRiderId:select.value,status:"assigned",assignedAt:serverTimestamp()});}catch(e){alert("Assign হয়নি: "+e.message);}finally{assign.disabled=false;}};
+   card.append(select,assign);box.append(card);
+  });
+ }
+ stopParcelOrders=onSnapshot(collection(db,"parcelOrders"),s=>{parcelDocs=s.docs;drawParcelOrders();},e=>{$("parcelAdminOrders").textContent="Parcel order load error: "+e.code;});
+ stopBusinessOrders=onSnapshot(collection(db,"businessDeliveryOrders"),s=>{businessDocs=s.docs;drawParcelOrders();},e=>{$("parcelAdminOrders").textContent="Business order load error: "+e.code;});
 }
+
 
 let stopAdminOffers=null;
 let stopCustomerMessages=null;
