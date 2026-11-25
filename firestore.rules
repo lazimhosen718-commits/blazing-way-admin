@@ -552,6 +552,11 @@ service cloud.firestore {
       allow create, update, delete: if false;
     }
 
+    match /platformSettings/{settingId} {
+      allow read: if isSuperAdmin();
+      allow create, update, delete: if false;
+    }
+
     // DEFAULT DENY — all unspecified collections and operations.
     // ---------------------------------------------------------
     match /{document=**} {
