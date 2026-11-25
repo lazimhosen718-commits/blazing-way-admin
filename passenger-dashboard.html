@@ -315,6 +315,8 @@ const app=initializeApp({
 
 const auth=getAuth(app);
 const db=getFirestore(app);
+import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-functions.js";
+const functions=getFunctions(app,"asia-south1");
 
 const nameBox=document.getElementById("passengerName");
 const emailBox=document.getElementById("passengerEmail");
@@ -770,11 +772,19 @@ bookingBtn.addEventListener("click",async()=>{
    bookingData
   );
 
-  bookingMessage.style.color="green";
-  bookingMessage.textContent=
-   "অভিনন্দন! আপনার Ride Booking সফল হয়েছে। "+
-   "বুকিং নম্বর: "+bookingRef.id+
-   " | Status: Pending";
+  bookingMessage.style.color="#8a5a00";
+  bookingMessage.textContent="Ride Request কাছাকাছি Online Driver-দের কাছে পাঠানো হচ্ছে...";
+  try{
+   const dispatch=await httpsCallable(functions,"dispatchRideRequest")({rideId:bookingRef.id});
+   bookingMessage.style.color="green";
+   bookingMessage.textContent=dispatch.data.offersSent>0
+    ? "Ride Request "+dispatch.data.offersSent+" জন Online Driver-এর কাছে পাঠানো হয়েছে। প্রথম Accept করা Driver Ride পাবেন। Booking: "+bookingRef.id
+    : "Booking হয়েছে, কিন্তু এখন কোনো উপযুক্ত Online Driver পাওয়া যায়নি। পরে আবার চেষ্টা করুন। Booking: "+bookingRef.id;
+  }catch(dispatchError){
+   console.error("Ride dispatch failed:",dispatchError);
+   bookingMessage.style.color="#b42318";
+   bookingMessage.textContent="Booking হয়েছে, কিন্তু Driver Request পাঠানো যায়নি। Support-এ Booking ID দিন: "+bookingRef.id;
+  }
 
   document.getElementById("pickup").value="";
   document.getElementById("destination").value="";
