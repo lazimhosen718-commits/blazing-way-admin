@@ -116,7 +116,6 @@ import {
  where,
  onSnapshot,
  serverTimestamp,
- setDoc,
  getDoc as firestoreGetDoc,
  onSnapshot as firestoreOnSnapshot
 } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-firestore.js";
@@ -158,6 +157,7 @@ function stopListeners(){
  if(stopRides)stopRides();
  if(stopPayments)stopPayments();
  if(stopRideOffers)stopRideOffers();
+ stopPresenceGps();
  stopRides=null;
  stopPayments=null;
  stopRideOffers=null;
