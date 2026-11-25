@@ -24,6 +24,28 @@ function money(value) {
 }
 
 /**
+ * RIDE COMMISSION SETTINGS: only Super Admin can change the Bike and Car rates.
+ * Rates are stored as fractions (1% = 0.01); the server reads them at settlement.
+ */
+exports.updateRideCommissionRates = onCall(async (request) => {
+  const actorUid = requireSuperAdmin(request);
+  const bike = Number(request.data?.bike);
+  const car = Number(request.data?.car);
+  if (!Number.isFinite(bike) || !Number.isFinite(car) || bike < 0 || car < 0 || bike > 0.5 || car > 0.5) {
+    throw new HttpsError("invalid-argument", "Bike ও Car কমিশন ০% থেকে ৫০%-এর মধ্যে দিন।");
+  }
+  const rates = { bike: Math.round(bike * 10000) / 10000, car: Math.round(car * 10000) / 10000 };
+  await db.collection("platformSettings").doc("rideCommission").set({
+    ...rates, updatedBy: actorUid, updatedAt: FieldValue.serverTimestamp()
+  }, { merge: true });
+  await db.collection("adminAuditLogs").add({
+    actorUid, action: "ride_commission_rates_updated", rates,
+    createdAt: FieldValue.serverTimestamp()
+  });
+  return { success: true, ...rates };
+});
+
+/**
  * Passenger requests a short-lived completion OTP.
  * The passenger shares this code with the assigned driver only after the trip.
  */
@@ -69,7 +91,8 @@ exports.completeRideWithOtp = onCall(async (request) => {
   let outcome;
 
   await db.runTransaction(async (tx) => {
-    const snap = await tx.get(rideRef);
+    const settingsRef = db.collection("platformSettings").doc("rideCommission");
+    const [snap, settingsSnap] = await Promise.all([tx.get(rideRef), tx.get(settingsRef)]);
     if (!snap.exists) throw new HttpsError("not-found", "Ride পাওয়া যায়নি।");
     const ride = snap.data();
 
@@ -91,7 +114,12 @@ exports.completeRideWithOtp = onCall(async (request) => {
 
     const actualFare = money(Math.min(estimatedFare, baseFare + completedDistanceKm * perKm));
     const passengerRefund = money(Math.max(0, estimatedFare - actualFare));
-    const commission = money(actualFare * 0.01);
+    const configuredRates = settingsSnap.exists ? settingsSnap.data() : {};
+    const commissionRate = Number(configuredRates[vehicle] ?? 0.01);
+    if (!Number.isFinite(commissionRate) || commissionRate < 0 || commissionRate > 0.5) {
+      throw new HttpsError("failed-precondition", "Ride কমিশন সেটিংস সঠিক নয়।");
+    }
+    const commission = money(actualFare * commissionRate);
     const driverNet = money(actualFare - commission);
 
     const passengerWalletRef = db.collection("passengerWallets").doc(ride.passengerId);
@@ -118,6 +146,7 @@ exports.completeRideWithOtp = onCall(async (request) => {
       actualFare,
       passengerRefund,
       platformCommission: commission,
+      platformCommissionRate: commissionRate,
       driverEarnings: driverNet,
       completedAt: FieldValue.serverTimestamp(),
       completionOtpHash: FieldValue.delete(),
@@ -133,6 +162,7 @@ exports.completeRideWithOtp = onCall(async (request) => {
       fare: actualFare,
       passengerRefund,
       platformCommission: commission,
+      platformCommissionRate: commissionRate,
       driverEarnings: driverNet,
       createdAt: FieldValue.serverTimestamp()
     });
