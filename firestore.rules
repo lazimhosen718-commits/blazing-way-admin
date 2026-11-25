@@ -28,7 +28,6 @@ service cloud.firestore {
     function isRideAdmin() { return hasAdminRole('ride'); }
     function isFoodAdmin() { return hasAdminRole('food'); }
     function isFoodRiderAdmin() { return hasAdminRole('food_rider'); }
-    function isFinanceAdmin() { return hasAdminRole('finance'); }
 
     function isApprovedDriver(driverId) {
       return signedIn()
@@ -243,9 +242,9 @@ service cloud.firestore {
     }
 
     match /driverPayments/{paymentId} {
-      allow read: if isFinanceAdmin() || (signedIn() && resource.data.driverId == request.auth.uid);
+      allow read: if isRideAdmin() || (signedIn() && resource.data.driverId == request.auth.uid);
 
-      allow create: if isFinanceAdmin()
+      allow create: if isRideAdmin()
         && request.resource.data.keys().hasAll([
           'driverId', 'driverName', 'amount', 'method', 'reference',
           'paidAt', 'recordedBy', 'createdAt'
@@ -270,15 +269,15 @@ service cloud.firestore {
     }
 
     match /passengerWallets/{passengerId} {
-      allow read: if isFinanceAdmin() || (signedIn() && request.auth.uid == passengerId);
+      allow read: if isRideAdmin() || (signedIn() && request.auth.uid == passengerId);
 
-      allow create: if isFinanceAdmin()
+      allow create: if isRideAdmin()
         && request.resource.data.keys().hasOnly(['balance', 'updatedAt'])
         && request.resource.data.balance is number
         && request.resource.data.balance >= 0
         && request.resource.data.updatedAt == request.time;
 
-      allow update: if isFinanceAdmin()
+      allow update: if isRideAdmin()
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['balance', 'updatedAt'])
         && request.resource.data.balance is number
         && request.resource.data.balance >= 0
@@ -288,7 +287,7 @@ service cloud.firestore {
     }
 
     match /depositRequests/{requestId} {
-      allow read: if isFinanceAdmin() || (signedIn() && resource.data.passengerId == request.auth.uid);
+      allow read: if isRideAdmin() || (signedIn() && resource.data.passengerId == request.auth.uid);
 
       allow create: if signedIn()
         && request.resource.data.keys().hasAll([
@@ -309,7 +308,7 @@ service cloud.firestore {
         && request.resource.data.status == 'pending'
         && request.resource.data.createdAt == request.time;
 
-      allow update: if isFinanceAdmin()
+      allow update: if isRideAdmin()
         && resource.data.status == 'pending'
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'reviewedBy', 'reviewedAt'])
         && request.resource.data.status in ['approved', 'rejected']
@@ -320,14 +319,14 @@ service cloud.firestore {
     }
 
     match /walletTransactions/{transactionId} {
-      allow read: if isFinanceAdmin()
+      allow read: if isRideAdmin()
         || (signedIn() && (
           resource.data.userId == request.auth.uid
           || resource.data.passengerId == request.auth.uid
           || resource.data.driverId == request.auth.uid
         ));
 
-      allow create: if isFinanceAdmin()
+      allow create: if isRideAdmin()
         && request.resource.data.keys().hasAll([
           'userId', 'passengerId', 'type', 'amount', 'method',
           'transactionId', 'depositRequestId', 'createdAt'
@@ -354,12 +353,12 @@ service cloud.firestore {
     }
 
     match /withdrawalRequests/{requestId} {
-      allow read: if isFinanceAdmin() || (signedIn() && resource.data.userId == request.auth.uid);
+      allow read: if isRideAdmin() || (signedIn() && resource.data.userId == request.auth.uid);
       allow create, update, delete: if false;
     }
 
     match /driverWallets/{driverId} {
-      allow read: if isFinanceAdmin() || (signedIn() && request.auth.uid == driverId && isApprovedDriver(driverId));
+      allow read: if isRideAdmin() || (signedIn() && request.auth.uid == driverId && isApprovedDriver(driverId));
       allow create, update, delete: if false;
     }
 
@@ -499,15 +498,15 @@ service cloud.firestore {
     // ---------------------------------------------------------
 
     match /merchantWallets/{merchantId} {
-      allow read: if (isFinanceAdmin() || isFoodAdmin()) || (signedIn() && request.auth.uid == merchantId && isApprovedMerchant(merchantId));
+      allow read: if isFoodAdmin() || (signedIn() && request.auth.uid == merchantId && isApprovedMerchant(merchantId));
 
-      allow create: if (isFinanceAdmin() || isFoodAdmin())
+      allow create: if isFoodAdmin()
         && request.resource.data.keys().hasOnly(['balance', 'updatedAt'])
         && request.resource.data.balance is number
         && request.resource.data.balance >= 0
         && request.resource.data.updatedAt == request.time;
 
-      allow update: if (isFinanceAdmin() || isFoodAdmin())
+      allow update: if isFoodAdmin()
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['balance', 'updatedAt'])
         && request.resource.data.balance is number
         && request.resource.data.balance >= 0
@@ -517,15 +516,15 @@ service cloud.firestore {
     }
 
     match /foodRiderWallets/{riderId} {
-      allow read: if (isFinanceAdmin() || isFoodRiderAdmin()) || (signedIn() && request.auth.uid == riderId && isApprovedFoodRider(riderId));
+      allow read: if isFoodAdmin() || (signedIn() && request.auth.uid == riderId && isApprovedFoodRider(riderId));
 
-      allow create: if (isFinanceAdmin() || isFoodRiderAdmin())
+      allow create: if isFoodAdmin()
         && request.resource.data.keys().hasOnly(['balance', 'updatedAt'])
         && request.resource.data.balance is number
         && request.resource.data.balance >= 0
         && request.resource.data.updatedAt == request.time;
 
-      allow update: if (isFinanceAdmin() || isFoodRiderAdmin())
+      allow update: if isFoodAdmin()
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['balance', 'updatedAt'])
         && request.resource.data.balance is number
         && request.resource.data.balance >= 0
@@ -557,7 +556,7 @@ service cloud.firestore {
     // Food wallet ledger is private to its owner and Admin.
     // Only trusted server code should create immutable fee/credit entries.
     match /foodWalletTransactions/{entryId} {
-      allow read: if (isFinanceAdmin() || isFoodAdmin())
+      allow read: if isFoodAdmin()
         || (signedIn() && resource.data.ownerId == request.auth.uid);
 
       allow create, update, delete: if false;
