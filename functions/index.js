@@ -103,6 +103,75 @@ exports.updateRideOperationsSettings = onCall(async (request) => {
 });
 
 /**
+ * Broadcast a newly created ride to online, approved drivers of matching vehicle type.
+ * The first driver to accept wins through a Firestore transaction.
+ */
+exports.dispatchRideRequest = onCall(async (request) => {
+  const passengerId = requireUser(request);
+  const rideId = String(request.data?.rideId || "").trim();
+  if (!rideId) throw new HttpsError("invalid-argument", "Ride ID প্রয়োজন।");
+  const rideRef = db.collection("rideBookings").doc(rideId);
+  const rideSnap = await rideRef.get();
+  if (!rideSnap.exists) throw new HttpsError("not-found", "Ride পাওয়া যায়নি।");
+  const ride = rideSnap.data();
+  if (ride.passengerId !== passengerId) throw new HttpsError("permission-denied", "এটি আপনার Ride নয়।");
+  if (ride.status !== "pending" || ride.driverId) throw new HttpsError("failed-precondition", "Ride আর Dispatch করা যাবে না।");
+
+  const presenceSnap = await db.collection("driverPresence").where("online", "==", true).get();
+  const eligible = [];
+  for (const presence of presenceSnap.docs) {
+    const driverId = presence.id;
+    const p = presence.data();
+    if (driverId === passengerId || typeof p.lat !== "number" || typeof p.lng !== "number") continue;
+    const profileSnap = await db.collection("driverApplications").doc(driverId).get();
+    if (!profileSnap.exists) continue;
+    const profile = profileSnap.data();
+    if (profile.status !== "approved" || profile.vehicleType !== ride.vehicleType) continue;
+    eligible.push({ driverId, driverName: profile.fullName || "Driver" });
+  }
+  if (!eligible.length) return { success: true, offersSent: 0, message: "এখন কোনো উপযুক্ত Online Driver পাওয়া যায়নি।" };
+
+  const batch = db.batch();
+  for (const driver of eligible.slice(0, 100)) {
+    const offerRef = db.collection("rideOffers").doc(rideId + "_" + driver.driverId);
+    batch.set(offerRef, {
+      rideId, driverId: driver.driverId, passengerId,
+      vehicleType: ride.vehicleType, pickup: ride.pickup,
+      destination: ride.destination, distanceKm: ride.distanceKm,
+      estimatedFare: ride.estimatedFare, status: "pending",
+      createdAt: FieldValue.serverTimestamp()
+    });
+  }
+  batch.update(rideRef, { dispatchStartedAt: FieldValue.serverTimestamp(), dispatchOfferCount: Math.min(eligible.length, 100) });
+  await batch.commit();
+  return { success: true, offersSent: Math.min(eligible.length, 100) };
+});
+
+exports.acceptRideOffer = onCall(async (request) => {
+  const driverId = requireUser(request);
+  const rideId = String(request.data?.rideId || "").trim();
+  if (!rideId) throw new HttpsError("invalid-argument", "Ride ID প্রয়োজন।");
+  const driverSnap = await db.collection("driverApplications").doc(driverId).get();
+  if (!driverSnap.exists || driverSnap.data().status !== "approved") throw new HttpsError("permission-denied", "অনুমোদিত Driver হতে হবে।");
+  const rideRef = db.collection("rideBookings").doc(rideId);
+  const offerRef = db.collection("rideOffers").doc(rideId + "_" + driverId);
+  await db.runTransaction(async tx => {
+    const [rideSnap, offerSnap] = await Promise.all([tx.get(rideRef), tx.get(offerRef)]);
+    if (!rideSnap.exists || !offerSnap.exists || offerSnap.data().status !== "pending") throw new HttpsError("not-found", "Ride Offer আর পাওয়া যাচ্ছে না।");
+    const ride = rideSnap.data();
+    if (ride.status !== "pending" || ride.driverId) throw new HttpsError("already-exists", "অন্য Driver ইতিমধ্যে Ride গ্রহণ করেছেন।");
+    tx.update(rideRef, {
+      driverId, driverName: driverSnap.data().fullName || "Driver",
+      driverPhone: driverSnap.data().phone || "",
+      status: "accepted", assignedAt: FieldValue.serverTimestamp(),
+      acceptedAt: FieldValue.serverTimestamp(), driverResponse: "accepted"
+    });
+    tx.update(offerRef, { status: "accepted", acceptedAt: FieldValue.serverTimestamp() });
+  });
+  return { success: true, message: "Ride আপনার নামে Assign হয়েছে।" };
+});
+
+/**
  * Passenger requests a short-lived completion OTP.
  * The passenger shares this code with the assigned driver only after the trip.
  */
