@@ -1039,6 +1039,11 @@ onAuthStateChanged(auth,async(user)=>{
   passengerReady=true;
   bookingBtn.disabled=false;
 
+  const requestedService=new URLSearchParams(window.location.search).get("service");
+  if(["bike","car","food","parcel","courier"].includes(requestedService)){
+   document.querySelector('[data-service="'+requestedService+'"]')?.click();
+  }
+
   loadMyBookings(user.uid);
   startOffersListener();
   startInboxListener(user.uid);
