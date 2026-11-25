@@ -1,4 +1,5 @@
 const { onCall, HttpsError } = require("firebase-functions/v2/https");
+const { onSchedule } = require("firebase-functions/v2/scheduler");
 const { setGlobalOptions } = require("firebase-functions/v2");
 const { initializeApp } = require("firebase-admin/app");
 const { getAuth } = require("firebase-admin/auth");
@@ -190,6 +191,111 @@ exports.dispatchRideRequest = onCall(async (request) => {
       ? "নিকটতম উপযুক্ত Driver-দের কাছে Request পাঠানো হয়েছে।"
       : "Pickup GPS না থাকায় নিকটতম অনুযায়ী সাজানো সম্ভব হয়নি।"
   };
+});
+
+
+/**
+ * Every minute, escalate pending rides whose current driver-offer wave timed out.
+ * Sends the next five nearest eligible drivers, excluding drivers already offered.
+ * Cloud Scheduler is provisioned automatically by Firebase on deployment.
+ */
+exports.escalateTimedOutRideRequests = onSchedule("every 1 minutes", async () => {
+  const pendingSnap = await db.collection("rideBookings")
+    .where("status", "==", "pending")
+    .limit(50)
+    .get();
+
+  for (const rideDoc of pendingSnap.docs) {
+    const ride = rideDoc.data();
+    if (ride.driverId || !ride.dispatchStartedAt?.toMillis) continue;
+
+    const settingsSnap = await db.collection("platformSettings").doc("rideOperations").get();
+    const settings = settingsSnap.exists ? settingsSnap.data() : {};
+    const timeoutSeconds = Math.max(30, Math.min(180, Number(settings.requestTimeoutSeconds ?? 30)));
+    const startedAt = ride.dispatchStartedAt.toMillis();
+    if (Date.now() - startedAt < timeoutSeconds * 1000) continue;
+
+    const rideRef = rideDoc.ref;
+    const claim = await db.runTransaction(async tx => {
+      const fresh = await tx.get(rideRef);
+      if (!fresh.exists) return false;
+      const current = fresh.data();
+      if (current.status !== "pending" || current.driverId
+          || !current.dispatchStartedAt?.toMillis
+          || current.dispatchStartedAt.toMillis() !== startedAt
+          || current.dispatchExhausted === true) return false;
+      tx.update(rideRef, {
+        dispatchStartedAt: FieldValue.serverTimestamp(),
+        dispatchWave: Number(current.dispatchWave || 1) + 1
+      });
+      return true;
+    });
+    if (!claim) continue;
+
+    const oldOffersSnap = await db.collection("rideOffers").where("rideId", "==", rideDoc.id).get();
+    const alreadyOffered = new Set(oldOffersSnap.docs.map(doc => doc.data().driverId));
+    const radiusKm = Math.max(1, Math.min(50, Number(settings.driverSearchRadiusKm ?? 5)));
+    const hasPickupGps = Number.isFinite(ride.pickupLat) && Number.isFinite(ride.pickupLng);
+    const presenceSnap = await db.collection("driverPresence").where("online", "==", true).get();
+    const candidates = [];
+
+    for (const presence of presenceSnap.docs) {
+      const driverId = presence.id;
+      const p = presence.data();
+      if (alreadyOffered.has(driverId) || driverId === ride.passengerId
+          || typeof p.lat !== "number" || typeof p.lng !== "number") continue;
+      const updatedMs = p.updatedAt?.toMillis ? p.updatedAt.toMillis() : 0;
+      if (!updatedMs || Date.now() - updatedMs > 120000) continue;
+      const profileSnap = await db.collection("driverApplications").doc(driverId).get();
+      if (!profileSnap.exists) continue;
+      const profile = profileSnap.data();
+      if (profile.status !== "approved" || profile.vehicleType !== ride.vehicleType) continue;
+      const distanceKm = hasPickupGps
+        ? rideDistanceKm(ride.pickupLat, ride.pickupLng, p.lat, p.lng)
+        : null;
+      if (hasPickupGps && distanceKm > radiusKm) continue;
+      candidates.push({driverId, distanceKm});
+    }
+
+    candidates.sort((a,b) => {
+      if (a.distanceKm === null) return 0;
+      if (b.distanceKm === null) return 0;
+      return a.distanceKm - b.distanceKm;
+    });
+    const nextWave = candidates.slice(0, 5);
+
+    if (!nextWave.length) {
+      await rideRef.update({
+        dispatchExhausted: true,
+        dispatchExhaustedAt: FieldValue.serverTimestamp()
+      });
+      continue;
+    }
+
+    const batch = db.batch();
+    for (const driver of nextWave) {
+      const offerRef = db.collection("rideOffers").doc(rideDoc.id + "_" + driver.driverId);
+      batch.set(offerRef, {
+        rideId: rideDoc.id,
+        driverId: driver.driverId,
+        passengerId: ride.passengerId,
+        vehicleType: ride.vehicleType,
+        pickup: ride.pickup,
+        destination: ride.destination,
+        distanceKm: ride.distanceKm,
+        estimatedFare: ride.estimatedFare,
+        driverDistanceKm: driver.distanceKm,
+        dispatchWave: Number(ride.dispatchWave || 1) + 1,
+        status: "pending",
+        createdAt: FieldValue.serverTimestamp()
+      });
+    }
+    batch.update(rideRef, {
+      dispatchOfferCount: FieldValue.increment(nextWave.length),
+      dispatchLastEscalatedAt: FieldValue.serverTimestamp()
+    });
+    await batch.commit();
+  }
 });
 
 exports.acceptRideOffer = onCall(async (request) => {
