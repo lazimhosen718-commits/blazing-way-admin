@@ -166,8 +166,19 @@ service cloud.firestore {
         ])
         && request.resource.data.keys().hasOnly([
           'passengerId', 'pickup', 'destination', 'vehicleType',
-          'distanceKm', 'estimatedFare', 'status', 'createdAt'
+          'distanceKm', 'estimatedFare', 'pickupLat', 'pickupLng', 'status', 'createdAt'
         ])
+        && (
+          (!('pickupLat' in request.resource.data) && !('pickupLng' in request.resource.data))
+          || (
+            request.resource.data.pickupLat is number
+            && request.resource.data.pickupLat >= -90
+            && request.resource.data.pickupLat <= 90
+            && request.resource.data.pickupLng is number
+            && request.resource.data.pickupLng >= -180
+            && request.resource.data.pickupLng <= 180
+          )
+        )
         && request.resource.data.passengerId == request.auth.uid
         && request.resource.data.pickup is string
         && request.resource.data.pickup.size() >= 2
