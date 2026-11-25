@@ -659,7 +659,8 @@ document.querySelectorAll(".service").forEach(button=>{
 
   button.classList.add("active");
 
-  if(service==="bike"||service==="car"){\n   document.getElementById("parcelSection").style.display="none";document.getElementById("foodSection").style.display="none";document.getElementById("rideSection").style.display="block";
+  if(service==="bike"||service==="car"){
+   document.getElementById("parcelSection").style.display="none";document.getElementById("foodSection").style.display="none";document.getElementById("rideSection").style.display="block";
 
    document.getElementById("vehicle").value=service;
 
@@ -671,12 +672,18 @@ document.querySelectorAll(".service").forEach(button=>{
     "Bike Ride নির্বাচন করা হয়েছে।":
     "Private Car Ride নির্বাচন করা হয়েছে।";
 
-  }else if(service==="food"){\n   document.getElementById("parcelSection").style.display="none";
+  }else if(service==="food"){
+   document.getElementById("parcelSection").style.display="none";
    document.getElementById("rideSection").style.display="none";
    document.getElementById("foodSection").style.display="block";
    document.getElementById("foodSection").scrollIntoView({behavior:"smooth"});
    loadFoodMenu();loadFoodOrders();
-  }else if(service==="parcel"||service==="courier"){\n   document.getElementById("rideSection").style.display="none";document.getElementById("foodSection").style.display="none";document.getElementById("parcelSection").style.display="block";\n   document.getElementById("parcelSection").scrollIntoView({behavior:"smooth"});\n   if(auth.currentUser){if(parcelUnsub)parcelUnsub();if(businessUnsub)businessUnsub();parcelUnsub=renderDeliveryOrders(query(collection(db,"parcelOrders"),where("customerId","==",auth.currentUser.uid)),"parcelOrdersList","Parcel");businessUnsub=renderDeliveryOrders(query(collection(db,"businessDeliveryOrders"),where("customerId","==",auth.currentUser.uid)),"businessOrdersList","Business Delivery");}\n   document.getElementById("parcelSection").querySelector("h2").textContent=service==="parcel"?"📦 Parcel Delivery":"🚚 Business Delivery";\n  }else if(service==="offers"){
+  }else if(service==="parcel"||service==="courier"){
+   document.getElementById("rideSection").style.display="none";document.getElementById("foodSection").style.display="none";document.getElementById("parcelSection").style.display="block";
+   document.getElementById("parcelSection").scrollIntoView({behavior:"smooth"});
+   if(auth.currentUser){if(parcelUnsub)parcelUnsub();if(businessUnsub)businessUnsub();parcelUnsub=renderDeliveryOrders(query(collection(db,"parcelOrders"),where("customerId","==",auth.currentUser.uid)),"parcelOrdersList","Parcel");businessUnsub=renderDeliveryOrders(query(collection(db,"businessDeliveryOrders"),where("customerId","==",auth.currentUser.uid)),"businessOrdersList","Business Delivery");}
+   document.getElementById("parcelSection").querySelector("h2").textContent=service==="parcel"?"📦 Parcel Delivery":"🚚 Business Delivery";
+  }else if(service==="offers"){
    openCustomerTab("offers");
   }else{
    const names={parcel:"Parcel",courier:"Courier",pay:"BLAZING-WAY Pay"};
