@@ -718,6 +718,13 @@ service cloud.firestore {
       allow delete: if isSuperAdmin();
     }
 
+    // Collection-group query support for the Super Admin Customer Support Inbox.
+    // The admin page queries collectionGroup("messages") filtered to senderRole == "customer".
+    // This grant is limited to documents under customerInbox and to the Super Admin.
+    match /{path=**}/customerInbox/{customerId}/messages/{messageId} {
+      allow read: if isSuperAdmin() && resource.data.senderRole == 'customer';
+    }
+
     // DEFAULT DENY — all unspecified collections and operations.
     // ---------------------------------------------------------
     match /{document=**} {
