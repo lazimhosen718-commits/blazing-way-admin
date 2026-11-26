@@ -2,6 +2,8 @@ name: Build BLAZING-WAY Customer APK
 
 on:
   push:
+    branches:
+      - customer-app-v2.0
     paths:
       - 'android-apk/**'
       - '.github/workflows/build-customer-apk.yml'
@@ -16,30 +18,64 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
       - name: Set up JDK
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
+
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
         with:
           packages: platform-tools
+
       - name: Accept Android SDK licenses
         run: yes | sdkmanager --licenses
+
       - name: Install Android platform
         run: sdkmanager "platforms;android-35" "build-tools;35.0.0" "platform-tools"
+
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
-      - name: Build debug APK
+
+      - name: Prepare release signing key
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          test -n "$KEYSTORE_BASE64" || { echo "Missing ANDROID_KEYSTORE_BASE64 GitHub secret"; exit 1; }
+          test -n "$KEYSTORE_PASSWORD" || { echo "Missing ANDROID_KEYSTORE_PASSWORD GitHub secret"; exit 1; }
+          test -n "$KEY_ALIAS" || { echo "Missing ANDROID_KEY_ALIAS GitHub secret"; exit 1; }
+          test -n "$KEY_PASSWORD" || { echo "Missing ANDROID_KEY_PASSWORD GitHub secret"; exit 1; }
+          echo "$KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/customer-release.jks"
+          test -s "$RUNNER_TEMP/customer-release.jks"
+
+      - name: Build signed release APK
         working-directory: android-apk
-        run: gradle assembleDebug
-      - name: Publish APK release
+        env:
+          ANDROID_KEYSTORE_PATH: ${{ runner.temp }}/customer-release.jks
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: gradle --no-daemon clean assembleRelease
+
+      - name: Verify APK signature
+        run: |
+          set -euo pipefail
+          APK="android-apk/app/build/outputs/apk/release/app-release.apk"
+          test -s "$APK"
+          apksigner verify --verbose --print-certs "$APK"
+
+      - name: Publish signed APK release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: customer-apk-${{ github.run_number }}
-          name: BLAZING-WAY Customer APK ${{ github.run_number }}
-          files: android-apk/app/build/outputs/apk/debug/app-debug.apk
-          make_latest: true
+          tag_name: customer-apk-v2.0-${{ github.run_number }}
+          name: BLAZING-WAY Customer APK v2.0 build ${{ github.run_number }}
+          files: android-apk/app/build/outputs/apk/release/app-release.apk
+          make_latest: false
