@@ -719,9 +719,9 @@ service cloud.firestore {
     }
 
     // Collection-group query support for the Super Admin Customer Support Inbox.
-    // The admin page queries collectionGroup("messages") filtered to senderRole == "customer".
-    // This grant is limited to documents under customerInbox and to the Super Admin.
-    match /{path=**}/customerInbox/{customerId}/messages/{messageId} {
+    // Firestore collectionGroup("messages") rules must match the collection ID.
+    // Only the Super Admin can read customer-authored messages through this query.
+    match /{path=**}/messages/{messageId} {
       allow read: if isSuperAdmin() && resource.data.senderRole == 'customer';
     }
 
