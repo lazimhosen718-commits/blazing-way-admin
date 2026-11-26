@@ -1784,9 +1784,7 @@ async function reviewDeposit(requestId,status,approveButton,rejectButton){
  }
 
  const prompt=status==="approved"
-  ? "৳"+money(amount)+" কি Passenger Wallet-এ যোগ করবেন?
-
-Transaction ID: "+(d.transactionId||"")
+  ? "৳"+money(amount)+" কি Passenger Wallet-এ যোগ করবেন?\n\nTransaction ID: "+(d.transactionId||"")
   : "এই Deposit Request Reject করবেন?";
  if(!confirm(prompt))return;
 
