@@ -29,7 +29,7 @@ This branch remains isolated from `main`. The existing production pages and Fire
 - WebView file access and content access are disabled; JavaScript-created windows and multiple windows are disabled; Safe Browsing is enabled on Android 8.0+.
 - SSL certificate errors are cancelled; there is no proceed-through-certificate-error path.
 - Added `android-apk/verify-release-config.sh` for release configuration smoke checks. The GitHub Actions workflow runs these checks before building.
-- Release workflow now labels the signed artifact as Customer APK v12.0, requires all four repository signing secrets, builds `assembleRelease`, verifies the APK signature, and publishes only the signed release APK.
+- Release workflow validates the Android project and compiles the debug variant first. The signed-release job proceeds only when all four repository signing secrets are configured; otherwise signed publishing is safely skipped. When enabled, it builds `assembleRelease`, verifies the APK signature, and publishes only the signed release APK.
 - No keystore or signing password is stored in the repository.
 
 ## Important existing application review findings
@@ -51,7 +51,7 @@ This branch remains isolated from `main`. The existing production pages and Fire
 ## Remaining release gates — not yet verified
 
 - Confirm the release keystore matches the signing certificate of any previously distributed Customer APK.
-- Configure the four GitHub Actions secrets securely.
+- Configure the four GitHub Actions secrets securely; until then, only the compile/smoke-check validation job can complete.
 - Run the v12.0 GitHub Actions workflow and confirm the release build succeeds.
 - Install the resulting APK on supported Android devices and test login, logout, back navigation, location permission grant/deny, denied navigation to untrusted hosts, and weak-network/error behavior.
 - Run end-to-end tests for actual Ride, Food, Parcel, Business Delivery, authentication, and payment flows. These flows are not certified complete by the WebView smoke checks.
