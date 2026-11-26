@@ -26,6 +26,16 @@ This branch is isolated from `main`. The existing production pages and Firestore
 - Food ordering calls the `placeFoodOrder` callable function; the server implementation must be reviewed before changes to pricing, fees, or wallet behavior.
 - The existing Firestore rules contain role-specific access controls and a default-deny fallback. They must be preserved and tested, not replaced with permissive rules.
 
+## Android APK release signing (implemented on this branch)
+
+- The Android Gradle release build now reads signing values from environment variables; no keystore or password is committed to the repository.
+- The GitHub Actions workflow now builds `assembleRelease`, verifies the APK signature with `apksigner`, and publishes only the release APK.
+- Debug APKs are no longer published by this workflow as production releases.
+- Before running the workflow, configure these repository Actions secrets: `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, and `ANDROID_KEY_PASSWORD`.
+- `ANDROID_KEYSTORE_BASE64` must contain the base64 encoding of the app's release keystore file. Keep an offline, secure backup of that keystore and its passwords. Never share them in chat or commit them.
+- If the same application is already distributed, use its original signing key for updates. A different key may prevent an in-place Android update.
+- The release workflow intentionally fails if any signing secret is missing. Do not replace this with an unsigned or debug-signed production release.
+
 ## Security requirements
 
 - Do not store passwords, OTPs, payment credentials, or trusted role claims in Firestore client-writable documents.
