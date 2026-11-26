@@ -480,6 +480,8 @@ $("saveCommissionRates").onclick=async()=>{
 
 // LOGIN
 $("loginBtn").onclick=async()=>{
+ const button=$("loginBtn");
+ const originalText="Login";
  $("message").textContent="";
  const email=$("email").value.trim();
  const password=$("password").value;
@@ -489,15 +491,19 @@ $("loginBtn").onclick=async()=>{
   return;
  }
 
- $("loginBtn").disabled=true;
+ button.disabled=true;
+ button.textContent="Login হচ্ছে...";
+ $("message").textContent="Firebase-এর সঙ্গে সংযোগ করা হচ্ছে...";
 
  try{
   await signInWithEmailAndPassword(auth,email,password);
+  $("message").textContent="Login সফল। Admin অনুমতি যাচাই হচ্ছে...";
  }catch(error){
-  console.error(error);
-  $("message").textContent="Login Error: "+error.code;
+  console.error("BLAZING-WAY admin login failed:",error);
+  $("message").textContent="Login Error: "+(error.code||"unknown")+" — "+(error.message||"অনুগ্রহ করে আবার চেষ্টা করুন।");
  }finally{
-  $("loginBtn").disabled=false;
+  button.disabled=false;
+  button.textContent=originalText;
  }
 };
 
