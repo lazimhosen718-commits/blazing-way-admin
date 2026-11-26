@@ -1,4 +1,4 @@
-name: Build BLAZING-WAY Customer APK
+name: Build BLAZING-WAY Customer APK v12.0
 
 on:
   push:
@@ -24,6 +24,10 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
+
+      - name: Run release configuration smoke checks
+        working-directory: android-apk
+        run: bash verify-release-config.sh
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
@@ -75,7 +79,7 @@ jobs:
       - name: Publish signed APK release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: customer-apk-v2.0-${{ github.run_number }}
-          name: BLAZING-WAY Customer APK v2.0 build ${{ github.run_number }}
+          tag_name: customer-apk-v12.0-${{ github.run_number }}
+          name: BLAZING-WAY Customer APK v12.0 build ${{ github.run_number }}
           files: android-apk/app/build/outputs/apk/release/app-release.apk
           make_latest: false
