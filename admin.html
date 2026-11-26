@@ -793,7 +793,7 @@ function loadCustomerCommunicationAdmin(){
    reply.onclick=async()=>{const value=prompt("Customer-কে উত্তর লিখুন:");if(!value||value.trim().length<2)return;reply.disabled=true;try{await addDoc(collection(db,"customerInbox",uid,"messages"),{senderUid:auth.currentUser.uid,senderRole:"admin",body:value.trim().slice(0,1000),read:false,createdAt:serverTimestamp()});alert("উত্তর পাঠানো হয়েছে।");}catch(e){alert("উত্তর পাঠানো যায়নি: "+(e.code||e.message));}finally{reply.disabled=false;}};
    row.append(who,body,time,reply);box.appendChild(row);
   });
- },e=>{$("adminCustomerMessages").textContent="Inbox Rules পরীক্ষা করুন: "+e.code;});
+ },e=>{console.error("Customer Support Inbox query failed:",e);$("adminCustomerMessages").textContent="Inbox Error: "+(e.code||"unknown")+" — "+(e.message||"বিস্তারিত পাওয়া যায়নি");});
 }
 $("publishOfferBtn").addEventListener("click",async()=>{
  const title=$("newOfferTitle").value.trim(),description=$("newOfferDescription").value.trim();
