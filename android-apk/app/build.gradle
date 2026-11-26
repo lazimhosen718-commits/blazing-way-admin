@@ -8,8 +8,8 @@ android {
         applicationId 'com.blazingway.customer'
         minSdk 23
         targetSdk 35
-        versionCode 1
-        versionName '2.0'
+        versionCode 12
+        versionName '12.0'
     }
 
     signingConfigs {
