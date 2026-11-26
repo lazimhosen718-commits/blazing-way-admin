@@ -9,6 +9,51 @@ android {
         minSdk 23
         targetSdk 35
         versionCode 1
-        versionName '1.0'
+        versionName '2.0'
+    }
+
+    signingConfigs {
+        release {
+            def keystorePath = System.getenv('ANDROID_KEYSTORE_PATH')
+            def keystorePasswordValue = System.getenv('ANDROID_KEYSTORE_PASSWORD')
+            def keyAliasValue = System.getenv('ANDROID_KEY_ALIAS')
+            def keyPasswordValue = System.getenv('ANDROID_KEY_PASSWORD')
+
+            if (keystorePath && keystorePasswordValue && keyAliasValue && keyPasswordValue) {
+                storeFile file(keystorePath)
+                storePassword keystorePasswordValue
+                keyAlias keyAliasValue
+                keyPassword keyPasswordValue
+            }
+        }
+    }
+
+    buildTypes {
+        debug {
+            // Debug builds use the Android debug signing key and are not production releases.
+        }
+        release {
+            // Release signing is supplied only through GitHub Actions secrets.
+            signingConfig signingConfigs.release
+            minifyEnabled false
+        }
+    }
+}
+
+// Never allow an unsigned or debug-signed APK to be published as a production release.
+tasks.configureEach { task ->
+    if (task.name == 'assembleRelease' || task.name == 'bundleRelease') {
+        task.doFirst {
+            def required = [
+                'ANDROID_KEYSTORE_PATH',
+                'ANDROID_KEYSTORE_PASSWORD',
+                'ANDROID_KEY_ALIAS',
+                'ANDROID_KEY_PASSWORD'
+            ]
+            def missing = required.findAll { !System.getenv(it) }
+            if (!missing.isEmpty()) {
+                throw new GradleException('Missing release-signing environment variables: ' + missing.join(', '))
+            }
+        }
     }
 }
