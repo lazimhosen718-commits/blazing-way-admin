@@ -1,7 +1,9 @@
-name: Build BLAZING-WAY Customer APK
+name: Build BLAZING-WAY Customer APK v12.0
 
 on:
   push:
+    branches:
+      - customer-app-v2.0
     paths:
       - 'android-apk/**'
       - '.github/workflows/build-customer-apk.yml'
@@ -11,35 +13,149 @@ permissions:
   contents: write
 
 jobs:
-  build:
+  validate:
+    name: Validate Android project
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
       - name: Set up JDK
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
+
+      - name: Run release configuration smoke checks
+        working-directory: android-apk
+        run: bash verify-release-config.sh
+
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
         with:
           packages: platform-tools
+
       - name: Accept Android SDK licenses
         run: yes | sdkmanager --licenses
+
       - name: Install Android platform
         run: sdkmanager "platforms;android-35" "build-tools;35.0.0" "platform-tools"
+
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
-      - name: Build debug APK
+
+      - name: Compile debug variant (validation only)
         working-directory: android-apk
-        run: gradle assembleDebug
-      - name: Publish APK release
+        run: gradle --no-daemon clean assembleDebug
+
+      - name: Upload debug APK (unsigned)
+        uses: actions/upload-artifact@v4
+        with:
+          name: blazing-way-customer-v12-debug-unsigned
+          path: android-apk/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 14
+
+  release:
+    name: Build and publish signed release
+    needs: validate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Check signing secrets
+        id: signing
+        continue-on-error: true
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          missing=""
+          [ -n "$KEYSTORE_BASE64" ] || missing="$missing ANDROID_KEYSTORE_BASE64"
+          [ -n "$KEYSTORE_PASSWORD" ] || missing="$missing ANDROID_KEYSTORE_PASSWORD"
+          [ -n "$KEY_ALIAS" ] || missing="$missing ANDROID_KEY_ALIAS"
+          [ -n "$KEY_PASSWORD" ] || missing="$missing ANDROID_KEY_PASSWORD"
+          if [ -n "$missing" ]; then
+            echo "available=false" >> "$GITHUB_OUTPUT"
+            echo "Missing repository signing secrets:$missing"
+            exit 0
+          fi
+          # Normalize copied Base64 text and restore terminal padding before decoding.
+          python3 - <<'PY'
+          import base64, os, re
+          raw = os.environ["KEYSTORE_BASE64"]
+          cleaned = re.sub(r"[^A-Za-z0-9+/]", "", raw).rstrip("=")
+          if not cleaned:
+              raise SystemExit("Keystore Base64 secret contains no decodable data.")
+          cleaned += "=" * (-len(cleaned) % 4)
+          data = base64.b64decode(cleaned, validate=True)
+          if not data:
+              raise SystemExit("Decoded keystore is empty.")
+          with open(os.path.join(os.environ["RUNNER_TEMP"], "customer-release.p12"), "wb") as f:
+              f.write(data)
+          PY
+          test -s "$RUNNER_TEMP/customer-release.p12"
+          # Confirm this is a valid PKCS12 keystore before attempting the Android build.
+          openssl pkcs12 -in "$RUNNER_TEMP/customer-release.p12" -noout -passin env:KEYSTORE_PASSWORD
+          echo "available=true" >> "$GITHUB_OUTPUT"
+          echo "Signing keystore decoded and validated."
+
+      - name: Set up JDK
+        if: steps.signing.outcome == 'success' && steps.signing.outputs.available == 'true'
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Android SDK
+        if: steps.signing.outcome == 'success' && steps.signing.outputs.available == 'true'
+        uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+
+      - name: Accept Android SDK licenses
+        if: steps.signing.outcome == 'success' && steps.signing.outputs.available == 'true'
+        run: yes | sdkmanager --licenses
+
+      - name: Install Android platform
+        if: steps.signing.outcome == 'success' && steps.signing.outputs.available == 'true'
+        run: sdkmanager "platforms;android-35" "build-tools;35.0.0" "platform-tools"
+
+      - name: Set up Gradle
+        if: steps.signing.outcome == 'success' && steps.signing.outputs.available == 'true'
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+
+      - name: Build signed release APK
+        if: steps.signing.outcome == 'success' && steps.signing.outputs.available == 'true'
+        working-directory: android-apk
+        env:
+          ANDROID_KEYSTORE_PATH: ${{ runner.temp }}/customer-release.p12
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: gradle --no-daemon clean assembleRelease
+
+      - name: Verify APK signature
+        if: steps.signing.outcome == 'success' && steps.signing.outputs.available == 'true'
+        run: |
+          set -euo pipefail
+          APK="android-apk/app/build/outputs/apk/release/app-release.apk"
+          test -s "$APK"
+          apksigner verify --verbose --print-certs "$APK"
+
+      - name: Publish signed APK release
+        if: steps.signing.outcome == 'success' && steps.signing.outputs.available == 'true'
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: customer-apk-${{ github.run_number }}
-          name: BLAZING-WAY Customer APK ${{ github.run_number }}
-          files: android-apk/app/build/outputs/apk/debug/app-debug.apk
-          make_latest: true
+          tag_name: customer-apk-v12.0-${{ github.run_number }}
+          name: BLAZING-WAY Customer APK v12.0 build ${{ github.run_number }}
+          files: android-apk/app/build/outputs/apk/release/app-release.apk
+          make_latest: false

@@ -117,25 +117,25 @@ button:disabled{opacity:.5;cursor:not-allowed}
 
 <div class="card" id="commissionSettings">
 <h3>Ride Commission Settings</h3>
-<p class="small">Bike ও Car-এর কমিশন আলাদাভাবে নির্ধারণ করুন। পরিবর্তন শুধু নতুন করে সম্পন্ন হওয়া Ride-এ কার্যকর হবে।</p>
+<p class="small">Bike ও Car উভয়ের Ride Commission কমপক্ষে ৫%। কমিশনের অর্ধেক Driver Incentive এবং অর্ধেক BLAZING-WAY-এর আয়। Customer Discount ২.৫% শুধু রিপোর্টে দেখাবে—গ্রাহককে দেওয়া বা গ্রাহকের কাছ থেকে নেওয়া হবে না।</p>
 <div class="grid">
- <div><label>Bike Commission (%)</label><input id="bikeCommissionRate" type="number" min="0" max="50" step="0.1" value="1"></div>
- <div><label>Car Commission (%)</label><input id="carCommissionRate" type="number" min="0" max="50" step="0.1" value="1"></div>
+ <div><label>Bike Commission (%)</label><input id="bikeCommissionRate" type="number" min="5" max="50" step="0.1" value="5"></div>
+ <div><label>Car Commission (%)</label><input id="carCommissionRate" type="number" min="5" max="50" step="0.1" value="5"></div>
 </div>
 <button id="saveCommissionRates" class="approveBtn">কমিশন সংরক্ষণ করুন</button>
-<p id="commissionSettingsMessage" class="small">বর্তমান হার: Bike ১% | Car ১%</p>
+<p id="commissionSettingsMessage" class="small">বর্তমান হার: Bike ৫% | Car ৫%</p>
 <p id="commissionInfo">লোড হচ্ছে...</p>
 </div>
 
 <div class="card" id="rideOperationsSettings">
 <h3>Ride Operations Settings — Super Admin</h3>
-<p class="small">এখানকার পরিবর্তন শুধু Super Admin করতে পারবেন। ভাড়া ও অপারেশনাল সীমা সংরক্ষিত হবে; GPS, SOS ও Auto-Dispatch-এর কার্যকর সংযোগ আলাদাভাবে সম্পন্ন করতে হবে।</p>
+<p class="small">এখানকার পরিবর্তন শুধু Super Admin করতে পারবেন। পুরোনো ডেমো ভাড়ার হার আর ডিফল্ট নয়—নতুন Bike/Car Base Fare ও প্রতি KM হার নির্ধারণ করে সংরক্ষণ না করা পর্যন্ত Passenger Booking-এ ভাড়া হিসাব বন্ধ থাকবে। GPS, SOS ও Auto-Dispatch-এর কার্যকর সংযোগ আলাদাভাবে যাচাই করতে হবে।</p>
 <div class="grid">
- <div><label>Bike Base Fare (৳)</label><input id="rideBikeBaseFare" type="number" min="0" max="10000" step="1" value="30"></div>
- <div><label>Bike প্রতি KM (৳)</label><input id="rideBikePerKm" type="number" min="0" max="1000" step="1" value="12"></div>
- <div><label>Car Base Fare (৳)</label><input id="rideCarBaseFare" type="number" min="0" max="20000" step="1" value="60"></div>
- <div><label>Car প্রতি KM (৳)</label><input id="rideCarPerKm" type="number" min="0" max="2000" step="1" value="20"></div>
- <div><label>Minimum Fare (৳)</label><input id="rideMinimumFare" type="number" min="0" max="10000" step="1" value="30"></div>
+ <div><label>Bike Base Fare (৳)</label><input id="rideBikeBaseFare" type="number" min="0.01" max="10000" step="0.01" value="0" placeholder="নতুন হার দিন"></div>
+ <div><label>Bike প্রতি KM (৳)</label><input id="rideBikePerKm" type="number" min="0.01" max="1000" step="0.01" value="0" placeholder="নতুন হার দিন"></div>
+ <div><label>Car Base Fare (৳)</label><input id="rideCarBaseFare" type="number" min="0.01" max="20000" step="0.01" value="0" placeholder="নতুন হার দিন"></div>
+ <div><label>Car প্রতি KM (৳)</label><input id="rideCarPerKm" type="number" min="0.01" max="2000" step="0.01" value="0" placeholder="নতুন হার দিন"></div>
+ <div><label>Minimum Fare (৳)</label><input id="rideMinimumFare" type="number" min="0" max="10000" step="1" value="0"></div>
  <div><label>Driver Request Timeout (সেকেন্ড)</label><input id="rideRequestTimeout" type="number" min="10" max="180" step="1" value="30"></div>
  <div><label>Driver Search Radius (KM)</label><input id="rideSearchRadius" type="number" min="1" max="50" step="0.5" value="5"></div>
  <div><label>Surge Multiplier</label><input id="rideSurgeMultiplier" type="number" min="1" max="5" step="0.1" value="1"></div>
@@ -390,7 +390,7 @@ function safeText(value){
 }
 
 function getRideCommissionRate(vehicleType){
- return Number(rideCommissionRates[vehicleType]??0.01);
+ return Number(rideCommissionRates[vehicleType]??0.05);
 }
 
 function loadRideCommissionSettings(){
@@ -398,12 +398,12 @@ function loadRideCommissionSettings(){
  stopCommissionSettings=onSnapshot(doc(db,"platformSettings","rideCommission"),snapshot=>{
   const rates=snapshot.exists()?snapshot.data():{};
   rideCommissionRates={
-   bike:Number.isFinite(Number(rates.bike))?Number(rates.bike):0.01,
-   car:Number.isFinite(Number(rates.car))?Number(rates.car):0.01
+   bike:Number.isFinite(Number(rates.bike))?Math.max(0.05,Number(rates.bike)):0.05,
+   car:Number.isFinite(Number(rates.car))?Math.max(0.05,Number(rates.car)):0.05
   };
   $("bikeCommissionRate").value=(rideCommissionRates.bike*100).toString();
   $("carCommissionRate").value=(rideCommissionRates.car*100).toString();
-  $("commissionSettingsMessage").textContent="বর্তমান হার: Bike "+(rideCommissionRates.bike*100)+"% | Car "+(rideCommissionRates.car*100)+"%";
+  $("commissionSettingsMessage").textContent="বর্তমান হার: Bike "+(rideCommissionRates.bike*100)+"% | Car "+(rideCommissionRates.car*100)+"% | ন্যূনতম ৫%";
   if(latestBookingDocs.length)renderRideBookings(latestBookingDocs);
   renderPaymentManagement();
  },error=>{
@@ -416,11 +416,11 @@ function loadRideOperationsSettings(){
  if(stopRideOperationsSettings)stopRideOperationsSettings();
  stopRideOperationsSettings=onSnapshot(doc(db,"platformSettings","rideOperations"),snapshot=>{
   const s=snapshot.exists()?snapshot.data():{};
-  $("rideBikeBaseFare").value=s.bikeBaseFare??30;
-  $("rideBikePerKm").value=s.bikePerKm??12;
-  $("rideCarBaseFare").value=s.carBaseFare??60;
-  $("rideCarPerKm").value=s.carPerKm??20;
-  $("rideMinimumFare").value=s.minimumFare??30;
+  $("rideBikeBaseFare").value=s.bikeBaseFare??0;
+  $("rideBikePerKm").value=s.bikePerKm??0;
+  $("rideCarBaseFare").value=s.carBaseFare??0;
+  $("rideCarPerKm").value=s.carPerKm??0;
+  $("rideMinimumFare").value=s.minimumFare??0;
   $("rideRequestTimeout").value=s.requestTimeoutSeconds??30;
   $("rideSearchRadius").value=s.driverSearchRadiusKm??5;
   $("rideSurgeMultiplier").value=s.surgeMultiplier??1;
@@ -449,6 +449,11 @@ $("saveRideOperationsSettings").onclick=async()=>{
   liveGpsEnabled:$("rideGpsEnabled").checked,
   sosEnabled:$("rideSosEnabled").checked
  };
+ const fareFields=[values.bikeBaseFare,values.bikePerKm,values.carBaseFare,values.carPerKm];
+ if(!fareFields.every(value=>Number.isFinite(value)&&value>0)){
+  $("rideOperationsSettingsMessage").textContent="Booking চালুর আগে Bike ও Car-এর Base Fare এবং প্রতি KM হার—চারটিই ০-এর বেশি দিতে হবে।";
+  return;
+ }
  button.disabled=true;
  $("rideOperationsSettingsMessage").textContent="Settings সংরক্ষণ হচ্ছে...";
  try{
@@ -464,8 +469,8 @@ $("saveCommissionRates").onclick=async()=>{
  const bikePercent=Number($("bikeCommissionRate").value);
  const carPercent=Number($("carCommissionRate").value);
  const button=$("saveCommissionRates");
- if(!Number.isFinite(bikePercent)||!Number.isFinite(carPercent)||bikePercent<0||carPercent<0||bikePercent>50||carPercent>50){
-  $("commissionSettingsMessage").textContent="কমিশন ০% থেকে ৫০%-এর মধ্যে দিন।";return;
+ if(!Number.isFinite(bikePercent)||!Number.isFinite(carPercent)||bikePercent<5||carPercent<5||bikePercent>50||carPercent>50){
+  $("commissionSettingsMessage").textContent="Bike ও Car কমিশন ৫% থেকে ৫০%-এর মধ্যে দিন।";return;
  }
  button.disabled=true;
  $("commissionSettingsMessage").textContent="সংরক্ষণ হচ্ছে...";
@@ -1052,16 +1057,24 @@ function renderRideBookings(docs){
  $("bookingCount").textContent="মোট বুকিং: "+total+" | Pending: "+pending;
  $("rideCount").textContent="মোট বুকিং: "+total+" | Pending: "+pending;
 
- let commission=0;
+ let commission=0,customerDiscountReport=0,driverIncentive=0,platformNetIncome=0;
 
  completed.forEach(item=>{
   const d=item.data();
   commission+=Number(d.platformCommission??(Number(d.actualFare??d.estimatedFare??0)*getRideCommissionRate(d.vehicleType)));
+  if(d.commissionPolicyVersion==="commission-split-v1"){
+   customerDiscountReport+=Number(d.customerDiscountReport||0);
+   driverIncentive+=Number(d.driverIncentive||0);
+   platformNetIncome+=Number(d.platformNetIncome||0);
+  }
  });
 
  $("commissionInfo").textContent=
   "Completed Ride: "+completed.length+
-  " | মোট কমিশন: ৳"+money(commission);
+  " | মোট কমিশন: ৳"+money(commission)+
+  " | Customer Discount (শুধু রিপোর্ট): ৳"+money(customerDiscountReport)+
+  " | Driver Incentive: ৳"+money(driverIncentive)+
+  " | BLAZING-WAY আয়: ৳"+money(platformNetIncome);
 
  if(!total){
   $("rideBookings").textContent="এখনো কোনো Booking নেই।";
@@ -1122,8 +1135,15 @@ function renderRideBookings(docs){
    const amount=Number(d.platformCommission??(Number(d.actualFare??d.estimatedFare??0)*getRideCommissionRate(d.vehicleType)));
    const box=document.createElement("div");
    box.className="commissionBox";
-   box.textContent="এই Ride-এর কমিশন: ৳"+money(amount);
+   box.textContent="এই Ride-এর মোট কমিশন: ৳"+money(amount);
    card.appendChild(box);
+   if(d.commissionPolicyVersion==="commission-split-v1"){
+    card.append(
+     line("Customer Discount (শুধু রিপোর্ট; বাস্তবে দেওয়া/নেওয়া নয়)","৳"+money(d.customerDiscountReport||0)),
+     line("Driver Incentive","৳"+money(d.driverIncentive||0)),
+     line("BLAZING-WAY-এর নিট আয়","৳"+money(d.platformNetIncome||0))
+    );
+   }
   }
 
   if(d.status==="pending"){
@@ -1377,7 +1397,8 @@ function getDriverPaymentData(){
   }
 
   const fare=Number(d.actualFare??d.estimatedFare??0);
-  const driverEarnings=Number(d.driverEarnings??(fare*(1-getRideCommissionRate(d.vehicleType))));
+  const rate=getRideCommissionRate(d.vehicleType);
+  const driverEarnings=Number(d.driverEarnings??(fare*(1-rate)+(fare*rate*0.5)));
 
   drivers[d.driverId].earnings+=driverEarnings;
   drivers[d.driverId].rides++;
@@ -1468,7 +1489,7 @@ function renderPaymentManagement(){
     title,
     line("Driver ID",driver.id),
     line("Completed Ride",driver.rides),
-    line("মোট আয় (৯৯%)","৳"+money(driver.earnings)),
+    line("মোট Driver আয় (Incentive-সহ)","৳"+money(driver.earnings)),
     line("পরিশোধিত","৳"+money(driver.paid)),
     due
    );

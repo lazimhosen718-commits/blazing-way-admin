@@ -73,11 +73,11 @@ button:disabled{opacity:.5}
 <div class="summary">
 <p>Completed Ride: <strong id="completedCount">0</strong></p>
 <p>মোট ভাড়া: <strong id="totalFare">৳0.00</strong></p>
-<p>চালকের আয় (৯৯%): <strong id="earnings">৳0.00</strong></p>
+<p>চালকের নিট আয় (৯৭.৫%): <strong id="earnings">৳0.00</strong></p>
 <p>পরিশোধিত: <strong id="paid">৳0.00</strong></p>
 <p>বকেয়া: <strong id="due">৳0.00</strong></p>
 </div>
-<p>Admin-এর কমিশন: প্রতি Completed Ride-এর ১%।</p>
+<p>নীতিমতে মোট কমিশন ৫%: চালক ইনসেনটিভ ২.৫% এবং BLAZING-WAY-এর রিপোর্টভিত্তিক আয় ২.৫%; চালকের নিট আয় সাধারণত ৯৭.৫%।</p>
 </div>
 
 <div class="card">
@@ -548,7 +548,7 @@ function renderEarnings(){
  rideDocs.forEach(item=>{
   const d=item.data();
   if(d.status==="completed"){
-   totalFare+=Number(d.estimatedFare||0);
+   totalFare+=Number(d.actualFare??d.finalFare??d.estimatedFare??0);
    completedCount++;
   }
  });
@@ -557,7 +557,7 @@ function renderEarnings(){
   paid+=Number(item.data().amount||0);
  });
 
- const earnings=totalFare*0.99;
+ const earnings=rideDocs.reduce((sum,item)=>{const d=item.data();if(d.status!=="completed")return sum;const fare=Number(d.actualFare??d.finalFare??d.estimatedFare??0);return sum+Number(d.driverNet??(fare*0.975).toFixed(2));},0);
  const due=earnings-paid;
 
  $("completedCount").textContent=completedCount;

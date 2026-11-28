@@ -16,6 +16,8 @@ main{max-width:800px;margin:20px auto;padding:12px}
 .item{border:1px solid #cbd5e1;padding:13px;margin:10px 0;border-radius:9px;overflow-wrap:anywhere}
 a.button{display:block;text-align:center;text-decoration:none;background:#123b70;color:white;padding:13px;border-radius:8px;margin-top:12px}
 .error{color:#b42318}.success{color:#087443}
+select,input{width:100%;padding:12px;border:1px solid #cbd5e1;border-radius:8px;margin:8px 0;background:white}
+button{width:100%;padding:13px;border:0;border-radius:8px;background:#123b70;color:white;margin-top:10px}
 </style>
 </head>
 <body>
@@ -27,13 +29,34 @@ a.button{display:block;text-align:center;text-decoration:none;background:#123b70
   <div class="grid">
    <div class="summary">Completed Ride<strong id="rideCount">0</strong></div>
    <div class="summary">মোট ভাড়া<strong id="fare">৳0.00</strong></div>
-   <div class="summary">চালকের আয় (৯৯%)<strong class="balance" id="earned">৳0.00</strong></div>
+   <div class="summary">চালকের নিট আয় (৯৭.৫%)<strong class="balance" id="earned">৳0.00</strong></div>
    <div class="summary">পরিশোধিত<strong id="paid">৳0.00</strong></div>
    <div class="summary">বকেয়া<strong class="due" id="due">৳0.00</strong></div>
   </div>
-  <p class="small">প্রতি Completed Ride-এর ভাড়ার ৯৯% চালকের আয় হিসেবে হিসাব করা হয়। Admin-এর ১% কমিশন আলাদা। এই Wallet বর্তমানে Ride ও Admin Payment Record থেকে হিসাব দেখায়; এটি ব্যাংক/মোবাইল ব্যাংকিংয়ে সরাসরি টাকা পাঠায় না।</p>
+  <p class="small">নীতিমতে মোট কমিশন ৫%: চালক ইনসেনটিভ ২.৫% এবং BLAZING-WAY-এর রিপোর্টভিত্তিক আয় ২.৫%। তাই চালকের নিট আয় সাধারণত প্রকৃত ভাড়ার ৯৭.৫%। Customer Discount ২.৫% শুধু Admin Report-এ দেখায়—গ্রাহকের কাছ থেকে নেওয়া বা গ্রাহককে দেওয়া হয় না। এই Wallet সরাসরি ব্যাংক/মোবাইল ব্যাংকিংয়ে টাকা পাঠায় না।</p>
   <a class="button" href="driver-dashboard.html">Driver Dashboard-এ ফিরে যান</a>
   <p id="message" class="small"></p>
+ </div>
+ <div class="card">
+  <h2>💸 টাকা পাওয়ার নিয়ম</h2>
+  <p class="small">একটি পদ্ধতি বেছে নিন। ২৪ ঘণ্টার পেমেন্ট অথবা Instant Withdrawal আপনার পছন্দ হিসেবে সংরক্ষিত হবে।</p>
+  <label for="payoutPreference">পেমেন্ট সময়</label>
+  <select id="payoutPreference"><option value="daily_24h">প্রতি ২৪ ঘণ্টায়</option><option value="instant">Instant Withdrawal</option></select>
+  <label for="payoutMethod">টাকা পাওয়ার মাধ্যম</label>
+  <select id="payoutMethod"><option value="bkash">bKash</option><option value="nagad">Nagad</option><option value="rocket">Rocket</option><option value="bank">Bank</option></select>
+  <label for="payoutAccount">অ্যাকাউন্ট নম্বর</label>
+  <input id="payoutAccount" type="text" maxlength="80" placeholder="মোবাইল/ব্যাংক অ্যাকাউন্ট নম্বর">
+  <button id="savePayout">পেমেন্ট পছন্দ সংরক্ষণ করুন</button>
+  <div style="border-top:1px solid #e2e8f0;margin-top:16px;padding-top:12px">
+   <h3>আগাম টাকা তোলার অনুরোধ</h3>
+   <label for="withdrawAmount">উত্তোলনের পরিমাণ (৳)</label>
+   <input id="withdrawAmount" type="number" min="1" step="0.01" placeholder="যেমন ৫০০">
+   <button id="requestInstant">উত্তোলনের অনুরোধ পাঠান</button>
+   <p id="withdrawMessage" class="small"></p>
+   <p class="small">এটি এখন Admin-এর কাছে Pending অনুরোধ পাঠাবে; Provider API ছাড়া সঙ্গে সঙ্গে টাকা পাঠানো সম্ভব নয়।</p>
+  </div>
+  <p id="payoutMessage" class="small"></p>
+  <p class="small">নোট: পেমেন্ট Provider API যুক্ত ও যাচাই না হওয়া পর্যন্ত টাকা স্বয়ংক্রিয় বা Instant পাঠানো হবে না। Driver withdrawal-এর বাধ্যতামূলক BLAZING-WAY ফি ৳০; Provider-এর প্রকৃত ফি থাকলে আগে জানানো হবে।</p>
  </div>
  <div class="card">
   <h2>🚕 Completed Ride-এর আয়</h2>
@@ -48,16 +71,48 @@ a.button{display:block;text-align:center;text-decoration:none;background:#123b70
 import {initializeApp} from "https://www.gstatic.com/firebasejs/12.0.0/firebase-app.js";
 import {getAuth,onAuthStateChanged,signOut} from "https://www.gstatic.com/firebasejs/12.0.0/firebase-auth.js";
 import {getFirestore,doc,getDoc,collection,query,where,onSnapshot} from "https://www.gstatic.com/firebasejs/12.0.0/firebase-firestore.js";
+import {getFunctions,httpsCallable} from "https://www.gstatic.com/firebasejs/12.0.0/firebase-functions.js";
 const app=initializeApp({apiKey:"AIzaSyBVzdXw-nO8ixDqxbGhTj3lbBX37XUMCr4",authDomain:"blazing-way.firebaseapp.com",projectId:"blazing-way",storageBucket:"blazing-way.firebasestorage.app",messagingSenderId:"100523779075",appId:"1:100523779075:web:732df54a1b0565f02e1a36",measurementId:"G-9V8GMD28ST"});
 const auth=getAuth(app),db=getFirestore(app),$=id=>document.getElementById(id);
+const functions=getFunctions(app,"asia-south1");
+const savePayoutPreference=httpsCallable(functions,"setDriverPayoutPreference");
+const requestWalletWithdrawal=httpsCallable(functions,"requestWalletWithdrawal");
+
 const money=n=>"৳"+Number(n||0).toFixed(2);
 let stopRides=null,stopPayments=null,rides=[],payments=[],uid=null;
 function stopAll(){if(stopRides)stopRides();if(stopPayments)stopPayments();stopRides=stopPayments=null}
+$("requestInstant").addEventListener("click",async()=>{
+ const amount=Number($("withdrawAmount").value);
+ const method=$("payoutMethod").value;
+ const accountNumber=$("payoutAccount").value.trim();
+ const btn=$("requestInstant");btn.disabled=true;$("withdrawMessage").textContent="অনুরোধ পাঠানো হচ্ছে...";
+ try{
+  const result=await requestWalletWithdrawal({amount,method,accountNumber,walletType:"driver"});
+  $("withdrawMessage").textContent="অনুরোধ Pending হয়েছে। Request ID: "+result.data.withdrawalRequestId+" | চার্জ: ৳"+Number(result.data.fee||0).toFixed(2);
+  $("withdrawAmount").value="";
+ }catch(e){$("withdrawMessage").textContent="অনুরোধ হয়নি: "+(e.message||e.code);}
+ finally{btn.disabled=false;}
+});
+$("savePayout").addEventListener("click",async()=>{
+ const user=auth.currentUser;
+ if(!user){$("payoutMessage").textContent="আবার Login করুন।";return;}
+ const btn=$("savePayout");btn.disabled=true;$("payoutMessage").textContent="সংরক্ষণ হচ্ছে...";
+ try{
+  await savePayoutPreference({
+   preference:$("payoutPreference").value,
+   method:$("payoutMethod").value,
+   accountNumber:$("payoutAccount").value.trim()
+  });
+  $("payoutMessage").textContent="আপনার পেমেন্ট পছন্দ সংরক্ষিত হয়েছে।";
+ }catch(e){$("payoutMessage").textContent="সংরক্ষণ হয়নি: "+(e.message||e.code);}
+ finally{btn.disabled=false;}
+});
+
 function line(label,value){const p=document.createElement("p");p.textContent=label+": "+value;return p}
 function render(){
  const completed=rides.filter(x=>x.data().status==="completed");
- const fare=completed.reduce((s,x)=>s+Number(x.data().estimatedFare||0),0);
- const earned=Number((fare*.99).toFixed(2));
+ const fare=completed.reduce((s,x)=>{const d=x.data();return s+Number(d.actualFare??d.finalFare??d.estimatedFare??0);},0);
+ const earned=completed.reduce((sum,x)=>{const d=x.data(),f=Number(d.actualFare??d.finalFare??d.estimatedFare??0);return sum+Number(d.driverNet??(f*.975).toFixed(2));},0);
  const paid=payments.reduce((s,x)=>s+Number(x.data().amount||0),0);
  $("rideCount").textContent=completed.length;
  $("fare").textContent=money(fare);
@@ -68,7 +123,7 @@ function render(){
  if(!completed.length)rh.textContent="এখনো কোনো Completed Ride নেই।";
  [...completed].sort((a,b)=>(b.data().assignedAt?.toMillis?.()||0)-(a.data().assignedAt?.toMillis?.()||0)).forEach(x=>{
   const d=x.data(),card=document.createElement("div");card.className="item";
-  card.append(line("Booking ID",x.id),line("Pickup",d.pickup||"—"),line("Destination",d.destination||"—"),line("মোট ভাড়া",money(d.estimatedFare)),line("আপনার আয় (৯৯%)",money(Number(d.estimatedFare||0)*.99)));
+  card.append(line("Booking ID",x.id),line("Pickup",d.pickup||"—"),line("Destination",d.destination||"—"),line("চূড়ান্ত ভাড়া",money(d.actualFare??d.finalFare??d.estimatedFare)),line("আপনার নিট আয়",money(d.driverNet??(Number(d.actualFare??d.finalFare??d.estimatedFare??0)*.975).toFixed(2))));
   rh.append(card);
  });
  const ph=$("paymentHistory");ph.replaceChildren();
@@ -84,6 +139,13 @@ onAuthStateChanged(auth,async user=>{
  if(!user){location.replace("driver-login.html");return}
  uid=user.uid;
  try{
+  const payoutSnap=await getDoc(doc(db,"driverPayoutPreferences",uid));
+  if(payoutSnap.exists()){
+   const pref=payoutSnap.data();
+   $("payoutPreference").value=pref.preference||"daily_24h";
+   $("payoutMethod").value=pref.method||"bkash";
+   $("payoutAccount").value=pref.accountNumber||"";
+  }
   const profile=await getDoc(doc(db,"driverApplications",uid));
   if(!profile.exists()||profile.data().status!=="approved"){await signOut(auth);location.replace("driver-login.html");return}
   const d=profile.data();

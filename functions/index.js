@@ -5,6 +5,7 @@ const { initializeApp } = require("firebase-admin/app");
 const { getAuth } = require("firebase-admin/auth");
 const { getFirestore, FieldValue } = require("firebase-admin/firestore");
 const crypto = require("node:crypto");
+const { calculateRideCommissionSplit } = require("./ride-settlement");
 
 initializeApp();
 const db = getFirestore();
@@ -32,8 +33,8 @@ exports.updateRideCommissionRates = onCall(async (request) => {
   const actorUid = requireSuperAdmin(request);
   const bike = Number(request.data?.bike);
   const car = Number(request.data?.car);
-  if (!Number.isFinite(bike) || !Number.isFinite(car) || bike < 0 || car < 0 || bike > 0.5 || car > 0.5) {
-    throw new HttpsError("invalid-argument", "Bike ও Car কমিশন ০% থেকে ৫০%-এর মধ্যে দিন।");
+  if (!Number.isFinite(bike) || !Number.isFinite(car) || bike < 0.05 || car < 0.05 || bike > 0.5 || car > 0.5) {
+    throw new HttpsError("invalid-argument", "Bike ও Car কমিশন ৫% থেকে ৫০%-এর মধ্যে দিন।");
   }
   const rates = { bike: Math.round(bike * 10000) / 10000, car: Math.round(car * 10000) / 10000 };
   await db.collection("platformSettings").doc("rideCommission").set({
@@ -63,10 +64,10 @@ exports.updateRideOperationsSettings = onCall(async (request) => {
     return value;
   };
   const settings = {
-    bikeBaseFare: money(numeric("bikeBaseFare", 0, 10000)),
-    bikePerKm: money(numeric("bikePerKm", 0, 1000)),
-    carBaseFare: money(numeric("carBaseFare", 0, 20000)),
-    carPerKm: money(numeric("carPerKm", 0, 2000)),
+    bikeBaseFare: money(numeric("bikeBaseFare", 0.01, 10000)),
+    bikePerKm: money(numeric("bikePerKm", 0.01, 1000)),
+    carBaseFare: money(numeric("carBaseFare", 0.01, 20000)),
+    carPerKm: money(numeric("carPerKm", 0.01, 2000)),
     minimumFare: money(numeric("minimumFare", 0, 10000)),
     requestTimeoutSeconds: Math.round(numeric("requestTimeoutSeconds", 10, 180)),
     driverSearchRadiusKm: Number(numeric("driverSearchRadiusKm", 1, 50).toFixed(1)),
@@ -353,7 +354,7 @@ exports.createRideCompletionOtp = onCall(async (request) => {
 /**
  * Driver completes an assigned ride using the passenger's OTP.
  * Unused distance fare is returned to the passenger wallet.
- * Platform commission is 1% of the actual fare.
+ * Platform commission is 5% of the actual fare; half is driver incentive and half is platform net income.
  */
 exports.completeRideWithOtp = onCall(async (request) => {
   const driverId = requireUser(request);
@@ -390,15 +391,15 @@ exports.completeRideWithOtp = onCall(async (request) => {
     const vehicle = ride.vehicleType;
     const operations = operationsSnap.exists ? operationsSnap.data() : {};
     const baseFare = vehicle === "bike"
-      ? Number(operations.bikeBaseFare ?? 30)
-      : vehicle === "car" ? Number(operations.carBaseFare ?? 60) : null;
+      ? Number(operations.bikeBaseFare ?? 0)
+      : vehicle === "car" ? Number(operations.carBaseFare ?? 0) : null;
     const perKm = vehicle === "bike"
-      ? Number(operations.bikePerKm ?? 12)
-      : vehicle === "car" ? Number(operations.carPerKm ?? 20) : null;
-    if (baseFare === null || !Number.isFinite(baseFare) || !Number.isFinite(perKm)) {
+      ? Number(operations.bikePerKm ?? 0)
+      : vehicle === "car" ? Number(operations.carPerKm ?? 0) : null;
+    if (baseFare === null || !Number.isFinite(baseFare) || baseFare <= 0 || !Number.isFinite(perKm) || perKm <= 0) {
       throw new HttpsError("failed-precondition", "Ride ভাড়ার সেটিংস সঠিক নয়।");
     }
-    const minimumFare = Number(operations.minimumFare ?? 30);
+    const minimumFare = Number(operations.minimumFare ?? 0);
     const surgeMultiplier = operations.surgeEnabled === true ? Number(operations.surgeMultiplier ?? 1) : 1;
     if (!Number.isFinite(minimumFare) || minimumFare < 0 || !Number.isFinite(surgeMultiplier) || surgeMultiplier < 1 || surgeMultiplier > 5) {
       throw new HttpsError("failed-precondition", "Minimum Fare বা Surge সেটিংস সঠিক নয়।");
@@ -407,12 +408,17 @@ exports.completeRideWithOtp = onCall(async (request) => {
     const actualFare = money(Math.min(estimatedFare, calculatedActualFare));
     const passengerRefund = money(Math.max(0, estimatedFare - actualFare));
     const configuredRates = settingsSnap.exists ? settingsSnap.data() : {};
-    const commissionRate = Number(configuredRates[vehicle] ?? 0.01);
-    if (!Number.isFinite(commissionRate) || commissionRate < 0 || commissionRate > 0.5) {
+    const savedCommissionRate = Number(configuredRates[vehicle] ?? 0.05);
+    let split;
+    try {
+      split = calculateRideCommissionSplit(actualFare, savedCommissionRate);
+    } catch (error) {
       throw new HttpsError("failed-precondition", "Ride কমিশন সেটিংস সঠিক নয়।");
     }
-    const commission = money(actualFare * commissionRate);
-    const driverNet = money(actualFare - commission);
+    const {
+      commissionRate, commission, driverIncentive,
+      customerDiscountReport, platformNetIncome, driverNet
+    } = split;
 
     const passengerWalletRef = db.collection("passengerWallets").doc(ride.passengerId);
     const driverWalletRef = db.collection("driverWallets").doc(driverId);
@@ -439,6 +445,12 @@ exports.completeRideWithOtp = onCall(async (request) => {
       passengerRefund,
       platformCommission: commission,
       platformCommissionRate: commissionRate,
+      customerDiscountReport,
+      customerDiscountReportRate: commissionRate * 0.5,
+      driverIncentive,
+      driverIncentiveRate: commissionRate * 0.5,
+      platformNetIncome,
+      commissionPolicyVersion: "commission-split-v1",
       driverEarnings: driverNet,
       completedAt: FieldValue.serverTimestamp(),
       completionOtpHash: FieldValue.delete(),
@@ -455,20 +467,61 @@ exports.completeRideWithOtp = onCall(async (request) => {
       passengerRefund,
       platformCommission: commission,
       platformCommissionRate: commissionRate,
+      customerDiscountReport,
+      customerDiscountReportRate: commissionRate * 0.5,
+      driverIncentive,
+      driverIncentiveRate: commissionRate * 0.5,
+      platformNetIncome,
+      commissionPolicyVersion: "commission-split-v1",
       driverEarnings: driverNet,
       createdAt: FieldValue.serverTimestamp()
     });
 
-    outcome = { actualFare, passengerRefund, commission, driverEarnings: driverNet };
+    outcome = {
+      actualFare, passengerRefund, commission, customerDiscountReport,
+      driverIncentive, platformNetIncome, driverEarnings: driverNet
+    };
   });
 
   return { success: true, ...outcome };
 });
 
 /**
+ * Drivers choose either a 24-hour payout cycle or instant-withdrawal preference.
+ * This stores the preference only; actual transfers require a configured provider API.
+ */
+exports.setDriverPayoutPreference = onCall(async (request) => {
+  const uid = requireUser(request);
+  const preference = String(request.data?.preference || "").trim();
+  const method = String(request.data?.method || "").trim().toLowerCase();
+  const accountNumber = String(request.data?.accountNumber || "").trim();
+  if (!["daily_24h", "instant"].includes(preference)) {
+    throw new HttpsError("invalid-argument", "২৪ ঘণ্টা অথবা Instant Withdrawal নির্বাচন করুন।");
+  }
+  if (!["bkash", "nagad", "rocket", "bank"].includes(method)
+      || accountNumber.length < 5 || accountNumber.length > 80) {
+    throw new HttpsError("invalid-argument", "সঠিক পেমেন্ট মাধ্যম ও অ্যাকাউন্ট নম্বর দিন।");
+  }
+  const profile = await db.collection("driverApplications").doc(uid).get();
+  if (!profile.exists || profile.data().status !== "approved") {
+    throw new HttpsError("permission-denied", "অনুমোদিত Driver অ্যাকাউন্ট প্রয়োজন।");
+  }
+  await db.collection("driverPayoutPreferences").doc(uid).set({
+    driverId: uid,
+    preference,
+    method,
+    accountNumber,
+    updatedAt: FieldValue.serverTimestamp(),
+    status: "saved"
+  }, { merge: true });
+  return { success: true, preference, method };
+});
+
+/**
  * Creates a withdrawal request. It does not send money automatically:
  * an administrator must review and pay it through the selected provider.
- * The flat 5 BDT fee is reserved together with the requested payout.
+ * Driver withdrawals have no mandatory flat fee; passenger withdrawals
+ * retain the existing BDT 5 fee until a separate passenger policy is approved.
  */
 exports.requestWalletWithdrawal = onCall(async (request) => {
   const uid = requireUser(request);
@@ -485,13 +538,18 @@ exports.requestWalletWithdrawal = onCall(async (request) => {
 
   const walletRef = db.collection(walletType === "driver" ? "driverWallets" : "passengerWallets").doc(uid);
   const requestRef = db.collection("withdrawalRequests").doc();
-  const totalDebit = money(amount + 5);
+  const fee = walletType === "driver" ? 0 : 5;
+  const totalDebit = money(amount + fee);
 
   await db.runTransaction(async (tx) => {
     const walletSnap = await tx.get(walletRef);
     if (!walletSnap.exists) throw new HttpsError("failed-precondition", "Wallet পাওয়া যায়নি।");
     const balance = money(walletSnap.data().balance || 0);
-    if (balance < totalDebit) throw new HttpsError("failed-precondition", "উত্তোলনের টাকা ও ৫ টাকা চার্জ দেওয়ার মতো পর্যাপ্ত ব্যালেন্স নেই।");
+    if (balance < totalDebit) {
+      throw new HttpsError("failed-precondition", fee > 0
+        ? "উত্তোলনের টাকা ও ৫ টাকা চার্জ দেওয়ার মতো পর্যাপ্ত ব্যালেন্স নেই।"
+        : "উত্তোলনের জন্য পর্যাপ্ত ব্যালেন্স নেই।");
+    }
 
     tx.update(walletRef, {
       balance: money(balance - totalDebit),
@@ -501,7 +559,7 @@ exports.requestWalletWithdrawal = onCall(async (request) => {
       userId: uid,
       walletType,
       amount,
-      fee: 5,
+      fee,
       totalDebited: totalDebit,
       method,
       accountNumber,
@@ -512,14 +570,14 @@ exports.requestWalletWithdrawal = onCall(async (request) => {
       userId: uid,
       type: "withdrawal_requested",
       amount,
-      fee: 5,
+      fee,
       totalDebited: totalDebit,
       withdrawalRequestId: requestRef.id,
       createdAt: FieldValue.serverTimestamp()
     });
   });
 
-  return { success: true, withdrawalRequestId: requestRef.id, amount, fee: 5, totalDebited: totalDebit, status: "pending" };
+  return { success: true, withdrawalRequestId: requestRef.id, amount, fee, totalDebited: totalDebit, status: "pending" };
 });
 
 
