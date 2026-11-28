@@ -111,8 +111,8 @@ $("savePayout").addEventListener("click",async()=>{
 function line(label,value){const p=document.createElement("p");p.textContent=label+": "+value;return p}
 function render(){
  const completed=rides.filter(x=>x.data().status==="completed");
- const fare=completed.reduce((s,x)=>s+Number(x.data().estimatedFare||0),0);
- const earned=Number((fare*.99).toFixed(2));
+ const fare=completed.reduce((s,x)=>{const d=x.data();return s+Number(d.actualFare??d.finalFare??d.estimatedFare??0);},0);
+ const earned=completed.reduce((sum,x)=>{const d=x.data(),f=Number(d.actualFare??d.finalFare??d.estimatedFare??0);return sum+Number(d.driverNet??(f*.975).toFixed(2));},0);
  const paid=payments.reduce((s,x)=>s+Number(x.data().amount||0),0);
  $("rideCount").textContent=completed.length;
  $("fare").textContent=money(fare);
