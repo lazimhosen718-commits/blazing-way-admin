@@ -303,7 +303,7 @@ button{border-radius:14px}
 <h3>আনুমানিক ভাড়া</h3>
 <p id="fare">৳০</p>
 <p class="small" id="fareDetails">
-দূরত্ব ও যানবাহন নির্বাচন করে ভাড়া হিসাব করুন।
+নতুন ভাড়ার হার Super Admin সংরক্ষণ করার পর এখানে আনুমানিক ভাড়া দেখা যাবে।
 </p>
 
 <p class="small">
@@ -552,13 +552,13 @@ document.getElementById("sendCustomerMessageBtn").addEventListener("click",async
  finally{btn.disabled=false;}
 });
 
-let ridePricingConfig={bikeBaseFare:30,bikePerKm:12,carBaseFare:60,carPerKm:20,minimumFare:30,surgeEnabled:false,surgeMultiplier:1};
+let ridePricingConfig={bikeBaseFare:0,bikePerKm:0,carBaseFare:0,carPerKm:0,minimumFare:0,surgeEnabled:false,surgeMultiplier:1};
 onSnapshot(doc(db,"platformSettings","rideOperations"),snapshot=>{
  const s=snapshot.exists()?snapshot.data():{};
  ridePricingConfig={
-  bikeBaseFare:Number(s.bikeBaseFare??30),bikePerKm:Number(s.bikePerKm??12),
-  carBaseFare:Number(s.carBaseFare??60),carPerKm:Number(s.carPerKm??20),
-  minimumFare:Number(s.minimumFare??30),surgeEnabled:s.surgeEnabled===true,
+  bikeBaseFare:Number(s.bikeBaseFare??0),bikePerKm:Number(s.bikePerKm??0),
+  carBaseFare:Number(s.carBaseFare??0),carPerKm:Number(s.carPerKm??0),
+  minimumFare:Number(s.minimumFare??0),surgeEnabled:s.surgeEnabled===true,
   surgeMultiplier:Number(s.surgeMultiplier??1)
  };
 },error=>console.warn("Ride pricing settings unavailable; using default fare settings.",error));
@@ -757,6 +757,10 @@ function calculateFare(){
 
  const base=vehicle==="bike"?ridePricingConfig.bikeBaseFare:ridePricingConfig.carBaseFare;
  const rate=vehicle==="bike"?ridePricingConfig.bikePerKm:ridePricingConfig.carPerKm;
+ // Prevent the retired demo pricing from being used before Super Admin saves current rates.
+ if(!Number.isFinite(base)||!Number.isFinite(rate)||base<=0||rate<=0){
+  throw new Error("নতুন Bike/Car ভাড়া এখনো Super Admin সেট করেননি। Admin Panel → Ride Operations Settings থেকে বর্তমান Base Fare ও প্রতি KM ভাড়া সংরক্ষণ করুন।");
+ }
  const raw=Math.max(ridePricingConfig.minimumFare,base+(distance*rate));
  const total=Math.round(raw*(ridePricingConfig.surgeEnabled?ridePricingConfig.surgeMultiplier:1));
 
