@@ -487,6 +487,37 @@ exports.completeRideWithOtp = onCall(async (request) => {
 });
 
 /**
+ * Drivers choose either a 24-hour payout cycle or instant-withdrawal preference.
+ * This stores the preference only; actual transfers require a configured provider API.
+ */
+exports.setDriverPayoutPreference = onCall(async (request) => {
+  const uid = requireUser(request);
+  const preference = String(request.data?.preference || "").trim();
+  const method = String(request.data?.method || "").trim().toLowerCase();
+  const accountNumber = String(request.data?.accountNumber || "").trim();
+  if (!["daily_24h", "instant"].includes(preference)) {
+    throw new HttpsError("invalid-argument", "২৪ ঘণ্টা অথবা Instant Withdrawal নির্বাচন করুন।");
+  }
+  if (!["bkash", "nagad", "rocket", "bank"].includes(method)
+      || accountNumber.length < 5 || accountNumber.length > 80) {
+    throw new HttpsError("invalid-argument", "সঠিক পেমেন্ট মাধ্যম ও অ্যাকাউন্ট নম্বর দিন।");
+  }
+  const profile = await db.collection("driverApplications").doc(uid).get();
+  if (!profile.exists || profile.data().status !== "approved") {
+    throw new HttpsError("permission-denied", "অনুমোদিত Driver অ্যাকাউন্ট প্রয়োজন।");
+  }
+  await db.collection("driverPayoutPreferences").doc(uid).set({
+    driverId: uid,
+    preference,
+    method,
+    accountNumber,
+    updatedAt: FieldValue.serverTimestamp(),
+    status: "saved"
+  }, { merge: true });
+  return { success: true, preference, method };
+});
+
+/**
  * Creates a withdrawal request. It does not send money automatically:
  * an administrator must review and pay it through the selected provider.
  * Driver withdrawals have no mandatory flat fee; passenger withdrawals
