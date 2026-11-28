@@ -47,6 +47,14 @@ button{width:100%;padding:13px;border:0;border-radius:8px;background:#123b70;col
   <label for="payoutAccount">অ্যাকাউন্ট নম্বর</label>
   <input id="payoutAccount" type="text" maxlength="80" placeholder="মোবাইল/ব্যাংক অ্যাকাউন্ট নম্বর">
   <button id="savePayout">পেমেন্ট পছন্দ সংরক্ষণ করুন</button>
+  <div style="border-top:1px solid #e2e8f0;margin-top:16px;padding-top:12px">
+   <h3>আগাম টাকা তোলার অনুরোধ</h3>
+   <label for="withdrawAmount">উত্তোলনের পরিমাণ (৳)</label>
+   <input id="withdrawAmount" type="number" min="1" step="0.01" placeholder="যেমন ৫০০">
+   <button id="requestInstant">উত্তোলনের অনুরোধ পাঠান</button>
+   <p id="withdrawMessage" class="small"></p>
+   <p class="small">এটি এখন Admin-এর কাছে Pending অনুরোধ পাঠাবে; Provider API ছাড়া সঙ্গে সঙ্গে টাকা পাঠানো সম্ভব নয়।</p>
+  </div>
   <p id="payoutMessage" class="small"></p>
   <p class="small">নোট: পেমেন্ট Provider API যুক্ত ও যাচাই না হওয়া পর্যন্ত টাকা স্বয়ংক্রিয় বা Instant পাঠানো হবে না। Driver withdrawal-এর বাধ্যতামূলক BLAZING-WAY ফি ৳০; Provider-এর প্রকৃত ফি থাকলে আগে জানানো হবে।</p>
  </div>
@@ -68,10 +76,23 @@ const app=initializeApp({apiKey:"AIzaSyBVzdXw-nO8ixDqxbGhTj3lbBX37XUMCr4",authDo
 const auth=getAuth(app),db=getFirestore(app),$=id=>document.getElementById(id);
 const functions=getFunctions(app,"asia-south1");
 const savePayoutPreference=httpsCallable(functions,"setDriverPayoutPreference");
+const requestWalletWithdrawal=httpsCallable(functions,"requestWalletWithdrawal");
 
 const money=n=>"৳"+Number(n||0).toFixed(2);
 let stopRides=null,stopPayments=null,rides=[],payments=[],uid=null;
 function stopAll(){if(stopRides)stopRides();if(stopPayments)stopPayments();stopRides=stopPayments=null}
+$("requestInstant").addEventListener("click",async()=>{
+ const amount=Number($("withdrawAmount").value);
+ const method=$("payoutMethod").value;
+ const accountNumber=$("payoutAccount").value.trim();
+ const btn=$("requestInstant");btn.disabled=true;$("withdrawMessage").textContent="অনুরোধ পাঠানো হচ্ছে...";
+ try{
+  const result=await requestWalletWithdrawal({amount,method,accountNumber,walletType:"driver"});
+  $("withdrawMessage").textContent="অনুরোধ Pending হয়েছে। Request ID: "+result.data.withdrawalRequestId+" | চার্জ: ৳"+Number(result.data.fee||0).toFixed(2);
+  $("withdrawAmount").value="";
+ }catch(e){$("withdrawMessage").textContent="অনুরোধ হয়নি: "+(e.message||e.code);}
+ finally{btn.disabled=false;}
+});
 $("savePayout").addEventListener("click",async()=>{
  const user=auth.currentUser;
  if(!user){$("payoutMessage").textContent="আবার Login করুন।";return;}
