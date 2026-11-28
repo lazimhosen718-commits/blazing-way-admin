@@ -489,7 +489,8 @@ exports.completeRideWithOtp = onCall(async (request) => {
 /**
  * Creates a withdrawal request. It does not send money automatically:
  * an administrator must review and pay it through the selected provider.
- * The flat 5 BDT fee is reserved together with the requested payout.
+ * Driver withdrawals have no mandatory flat fee; passenger withdrawals
+ * retain the existing BDT 5 fee until a separate passenger policy is approved.
  */
 exports.requestWalletWithdrawal = onCall(async (request) => {
   const uid = requireUser(request);
@@ -506,13 +507,18 @@ exports.requestWalletWithdrawal = onCall(async (request) => {
 
   const walletRef = db.collection(walletType === "driver" ? "driverWallets" : "passengerWallets").doc(uid);
   const requestRef = db.collection("withdrawalRequests").doc();
-  const totalDebit = money(amount + 5);
+  const fee = walletType === "driver" ? 0 : 5;
+  const totalDebit = money(amount + fee);
 
   await db.runTransaction(async (tx) => {
     const walletSnap = await tx.get(walletRef);
     if (!walletSnap.exists) throw new HttpsError("failed-precondition", "Wallet পাওয়া যায়নি।");
     const balance = money(walletSnap.data().balance || 0);
-    if (balance < totalDebit) throw new HttpsError("failed-precondition", "উত্তোলনের টাকা ও ৫ টাকা চার্জ দেওয়ার মতো পর্যাপ্ত ব্যালেন্স নেই।");
+    if (balance < totalDebit) {
+      throw new HttpsError("failed-precondition", fee > 0
+        ? "উত্তোলনের টাকা ও ৫ টাকা চার্জ দেওয়ার মতো পর্যাপ্ত ব্যালেন্স নেই।"
+        : "উত্তোলনের জন্য পর্যাপ্ত ব্যালেন্স নেই।");
+    }
 
     tx.update(walletRef, {
       balance: money(balance - totalDebit),
@@ -522,7 +528,7 @@ exports.requestWalletWithdrawal = onCall(async (request) => {
       userId: uid,
       walletType,
       amount,
-      fee: 5,
+      fee,
       totalDebited: totalDebit,
       method,
       accountNumber,
@@ -533,14 +539,14 @@ exports.requestWalletWithdrawal = onCall(async (request) => {
       userId: uid,
       type: "withdrawal_requested",
       amount,
-      fee: 5,
+      fee,
       totalDebited: totalDebit,
       withdrawalRequestId: requestRef.id,
       createdAt: FieldValue.serverTimestamp()
     });
   });
 
-  return { success: true, withdrawalRequestId: requestRef.id, amount, fee: 5, totalDebited: totalDebit, status: "pending" };
+  return { success: true, withdrawalRequestId: requestRef.id, amount, fee, totalDebited: totalDebit, status: "pending" };
 });
 
 
