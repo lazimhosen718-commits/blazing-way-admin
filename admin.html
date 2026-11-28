@@ -94,8 +94,12 @@ button:disabled{opacity:.5;cursor:not-allowed}
  <label>অফারের শেষ তারিখ</label><input id="newOfferEnd" type="date">
  <button id="publishOfferBtn" class="approveBtn">অফার Publish করুন</button><p id="offerAdminStatus" class="small"></p>
  <h3>প্রকাশিত অফার</h3><div id="adminOffersList">লোড হচ্ছে...</div>
- <hr>
- <h3>📩 Customer Support Inbox</h3><div id="adminCustomerMessages">বার্তা লোড হচ্ছে...</div>
+
+</div>
+
+<div class="card" id="customerSupportInboxCard" style="display:none">
+ <h2>📩 Customer Support Inbox</h2>
+ <div id="adminCustomerMessages">বার্তা লোড হচ্ছে...</div>
 </div>
 
 <div class="grid">
@@ -621,6 +625,7 @@ function applyAdminRoleVisibility(){
  setCardVisible("foodOrderMonitoring",food||foodRider);
  setCardVisible("foodWalletReport",foodFinance);
  setCardVisible("parcelRiderManagement",parcel);
+ setCardVisible("customerSupportInboxCard",currentIsSuperAdmin||currentAdminRoles.includes("support"));
 
  const welcome=document.querySelector("#dashboard > .card h2");
  if(welcome)welcome.textContent=currentIsSuperAdmin?"স্বাগতম, Super Admin!":"স্বাগতম, Service Admin!";
@@ -703,8 +708,10 @@ onAuthStateChanged(auth,async user=>{
     loadAdminAccounts();loadRideCommissionSettings();loadRideOperationsSettings();
     $("customerCommunicationAdmin").style.display="block";
     loadCustomerCommunicationAdmin();
+    loadCustomerSupportInbox();
    }else{
     $("customerCommunicationAdmin").style.display="none";
+    if(currentAdminRoles.includes("support")) loadCustomerSupportInbox();
    }
   }else{
    await signOut(auth);
@@ -785,6 +792,9 @@ function loadCustomerCommunicationAdmin(){
    row.append(title,detail,state,toggle);box.appendChild(row);
   });
  },e=>{$("adminOffersList").textContent="Offers Rules পরীক্ষা করুন: "+e.code;});
+}
+function loadCustomerSupportInbox(){
+ if(stopCustomerMessages)stopCustomerMessages();
  stopCustomerMessages=onSnapshot(query(collectionGroup(db,"messages"),where("senderRole","==","customer")),snap=>{
   const box=$("adminCustomerMessages");box.replaceChildren();
   const docs=snap.docs.slice().sort((a,b)=>(b.data().createdAt?.toMillis?.()||0)-(a.data().createdAt?.toMillis?.()||0));
@@ -799,7 +809,7 @@ function loadCustomerCommunicationAdmin(){
    row.append(who,body,time,reply);box.appendChild(row);
   });
  },e=>{console.error("Customer Support Inbox query failed:",e);$("adminCustomerMessages").textContent="Inbox Error: "+(e.code||"unknown")+" — "+(e.message||"বিস্তারিত পাওয়া যায়নি");});
-}
+
 $("publishOfferBtn").addEventListener("click",async()=>{
  const title=$("newOfferTitle").value.trim(),description=$("newOfferDescription").value.trim();
  const discount=$("newOfferDiscount").value.trim(),code=$("newOfferCode").value.trim(),end=$("newOfferEnd").value;
