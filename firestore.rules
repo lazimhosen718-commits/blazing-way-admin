@@ -29,6 +29,7 @@ service cloud.firestore {
     function isFoodAdmin() { return hasAdminRole('food'); }
     function isFoodRiderAdmin() { return hasAdminRole('food_rider'); }
     function isParcelAdmin() { return hasAdminRole('parcel'); }
+    function isSupportAdmin() { return hasAdminRole('support'); }
     function isApprovedParcelRider(riderId) {
       return signedIn() && request.auth.uid == riderId
         && exists(/databases/$(database)/documents/parcelRiderProfiles/$(riderId))
@@ -689,10 +690,10 @@ service cloud.firestore {
     // CUSTOMER INBOX: each customer can read only their own conversation.
     // Customers can send messages; Super Admin can send replies/announcements.
     match /customerInbox/{customerId}/messages/{messageId} {
-      allow read: if isSuperAdmin() || (signedIn() && request.auth.uid == customerId);
+      allow read: if isSuperAdmin() || isSupportAdmin() || (signedIn() && request.auth.uid == customerId);
 
       allow create: if (
-          isSuperAdmin()
+          (isSuperAdmin() || isSupportAdmin())
           && request.resource.data.senderUid == request.auth.uid
           && request.resource.data.senderRole == 'admin'
           && request.resource.data.keys().hasOnly(['senderUid', 'senderRole', 'body', 'read', 'createdAt'])
@@ -725,11 +726,11 @@ service cloud.firestore {
       allow delete: if isSuperAdmin();
     }
 
-    // Collection-group query support for the Super Admin Customer Support Inbox.
+    // Collection-group query support for the Super Admin and Customer Support Admin Inbox.
     // Firestore collectionGroup("messages") rules must match the collection ID.
-    // Only the Super Admin can read customer-authored messages through this query.
+    // Only authorized admins can read customer-authored messages through this query.
     match /{path=**}/messages/{messageId} {
-      allow read: if isSuperAdmin() && resource.data.senderRole == 'customer';
+      allow read: if (isSuperAdmin() || isSupportAdmin()) && resource.data.senderRole == 'customer';
     }
 
     // DEFAULT DENY — all unspecified collections and operations.
