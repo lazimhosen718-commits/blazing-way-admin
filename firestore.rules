@@ -364,6 +364,13 @@ service cloud.firestore {
       allow create, update, delete: if false;
     }
 
+    match /driverPayoutPreferences/{driverId} {
+      allow read: if isRideAdmin() || (signedIn() && request.auth.uid == driverId && isApprovedDriver(driverId));
+      // Preferences are written only by the authenticated callable so account
+      // destination changes are validated and timestamped server-side.
+      allow create, update, delete: if false;
+    }
+
     match /driverWallets/{driverId} {
       allow read: if isRideAdmin() || (signedIn() && request.auth.uid == driverId && isApprovedDriver(driverId));
       allow create, update, delete: if false;
