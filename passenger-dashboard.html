@@ -758,8 +758,11 @@ function calculateFare(){
  const base=vehicle==="bike"?ridePricingConfig.bikeBaseFare:ridePricingConfig.carBaseFare;
  const rate=vehicle==="bike"?ridePricingConfig.bikePerKm:ridePricingConfig.carPerKm;
  // Prevent the retired demo pricing from being used before Super Admin saves current rates.
- if(!Number.isFinite(base)||!Number.isFinite(rate)||base<=0||rate<=0){
-  throw new Error("নতুন Bike/Car ভাড়া এখনো Super Admin সেট করেননি। Admin Panel → Ride Operations Settings থেকে বর্তমান Base Fare ও প্রতি KM ভাড়া সংরক্ষণ করুন।");
+ const isRetiredDemoFare=vehicle==="bike"
+  ? base===30&&rate===12&&ridePricingConfig.minimumFare===30
+  : base===60&&rate===20&&ridePricingConfig.minimumFare===30;
+ if(isRetiredDemoFare||!Number.isFinite(base)||!Number.isFinite(rate)||base<=0||rate<=0){
+  throw new Error("পুরোনো ডেমো ভাড়া বন্ধ। Super Admin-কে Admin Panel → Ride Operations Settings থেকে নতুন Base Fare, প্রতি KM ভাড়া ও Minimum Fare সংরক্ষণ করতে হবে।");
  }
  const raw=Math.max(ridePricingConfig.minimumFare,base+(distance*rate));
  const total=Math.round(raw*(ridePricingConfig.surgeEnabled?ridePricingConfig.surgeMultiplier:1));
