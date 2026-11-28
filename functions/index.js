@@ -5,6 +5,7 @@ const { initializeApp } = require("firebase-admin/app");
 const { getAuth } = require("firebase-admin/auth");
 const { getFirestore, FieldValue } = require("firebase-admin/firestore");
 const crypto = require("node:crypto");
+const { calculateRideCommissionSplit } = require("./ride-settlement");
 
 initializeApp();
 const db = getFirestore();
@@ -408,16 +409,16 @@ exports.completeRideWithOtp = onCall(async (request) => {
     const passengerRefund = money(Math.max(0, estimatedFare - actualFare));
     const configuredRates = settingsSnap.exists ? settingsSnap.data() : {};
     const savedCommissionRate = Number(configuredRates[vehicle] ?? 0.05);
-    if (!Number.isFinite(savedCommissionRate) || savedCommissionRate < 0 || savedCommissionRate > 0.5) {
+    let split;
+    try {
+      split = calculateRideCommissionSplit(actualFare, savedCommissionRate);
+    } catch (error) {
       throw new HttpsError("failed-precondition", "Ride কমিশন সেটিংস সঠিক নয়।");
     }
-    // Legacy commission settings below 5% are treated as 5% under the new policy.
-    const commissionRate = Math.max(0.05, savedCommissionRate);
-    const commission = money(actualFare * commissionRate);
-    const driverIncentive = money(commission * 0.5);
-    const customerDiscountReport = driverIncentive; // Report-only: no customer credit/debit.
-    const platformNetIncome = money(commission - driverIncentive);
-    const driverNet = money(actualFare - commission + driverIncentive);
+    const {
+      commissionRate, commission, driverIncentive,
+      customerDiscountReport, platformNetIncome, driverNet
+    } = split;
 
     const passengerWalletRef = db.collection("passengerWallets").doc(ride.passengerId);
     const driverWalletRef = db.collection("driverWallets").doc(driverId);
