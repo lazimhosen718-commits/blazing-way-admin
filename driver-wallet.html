@@ -16,6 +16,8 @@ main{max-width:800px;margin:20px auto;padding:12px}
 .item{border:1px solid #cbd5e1;padding:13px;margin:10px 0;border-radius:9px;overflow-wrap:anywhere}
 a.button{display:block;text-align:center;text-decoration:none;background:#123b70;color:white;padding:13px;border-radius:8px;margin-top:12px}
 .error{color:#b42318}.success{color:#087443}
+select,input{width:100%;padding:12px;border:1px solid #cbd5e1;border-radius:8px;margin:8px 0;background:white}
+button{width:100%;padding:13px;border:0;border-radius:8px;background:#123b70;color:white;margin-top:10px}
 </style>
 </head>
 <body>
@@ -36,6 +38,19 @@ a.button{display:block;text-align:center;text-decoration:none;background:#123b70
   <p id="message" class="small"></p>
  </div>
  <div class="card">
+  <h2>💸 টাকা পাওয়ার নিয়ম</h2>
+  <p class="small">একটি পদ্ধতি বেছে নিন। ২৪ ঘণ্টার পেমেন্ট অথবা Instant Withdrawal আপনার পছন্দ হিসেবে সংরক্ষিত হবে।</p>
+  <label for="payoutPreference">পেমেন্ট সময়</label>
+  <select id="payoutPreference"><option value="daily_24h">প্রতি ২৪ ঘণ্টায়</option><option value="instant">Instant Withdrawal</option></select>
+  <label for="payoutMethod">টাকা পাওয়ার মাধ্যম</label>
+  <select id="payoutMethod"><option value="bkash">bKash</option><option value="nagad">Nagad</option><option value="rocket">Rocket</option><option value="bank">Bank</option></select>
+  <label for="payoutAccount">অ্যাকাউন্ট নম্বর</label>
+  <input id="payoutAccount" type="text" maxlength="80" placeholder="মোবাইল/ব্যাংক অ্যাকাউন্ট নম্বর">
+  <button id="savePayout">পেমেন্ট পছন্দ সংরক্ষণ করুন</button>
+  <p id="payoutMessage" class="small"></p>
+  <p class="small">নোট: পেমেন্ট Provider API যুক্ত ও যাচাই না হওয়া পর্যন্ত টাকা স্বয়ংক্রিয় বা Instant পাঠানো হবে না। Driver withdrawal-এর বাধ্যতামূলক BLAZING-WAY ফি ৳০; Provider-এর প্রকৃত ফি থাকলে আগে জানানো হবে।</p>
+ </div>
+ <div class="card">
   <h2>🚕 Completed Ride-এর আয়</h2>
   <div id="rideHistory">Ride লোড হচ্ছে...</div>
  </div>
@@ -48,11 +63,30 @@ a.button{display:block;text-align:center;text-decoration:none;background:#123b70
 import {initializeApp} from "https://www.gstatic.com/firebasejs/12.0.0/firebase-app.js";
 import {getAuth,onAuthStateChanged,signOut} from "https://www.gstatic.com/firebasejs/12.0.0/firebase-auth.js";
 import {getFirestore,doc,getDoc,collection,query,where,onSnapshot} from "https://www.gstatic.com/firebasejs/12.0.0/firebase-firestore.js";
+import {getFunctions,httpsCallable} from "https://www.gstatic.com/firebasejs/12.0.0/firebase-functions.js";
 const app=initializeApp({apiKey:"AIzaSyBVzdXw-nO8ixDqxbGhTj3lbBX37XUMCr4",authDomain:"blazing-way.firebaseapp.com",projectId:"blazing-way",storageBucket:"blazing-way.firebasestorage.app",messagingSenderId:"100523779075",appId:"1:100523779075:web:732df54a1b0565f02e1a36",measurementId:"G-9V8GMD28ST"});
 const auth=getAuth(app),db=getFirestore(app),$=id=>document.getElementById(id);
+const functions=getFunctions(app,"asia-south1");
+const savePayoutPreference=httpsCallable(functions,"setDriverPayoutPreference");
+
 const money=n=>"৳"+Number(n||0).toFixed(2);
 let stopRides=null,stopPayments=null,rides=[],payments=[],uid=null;
 function stopAll(){if(stopRides)stopRides();if(stopPayments)stopPayments();stopRides=stopPayments=null}
+$("savePayout").addEventListener("click",async()=>{
+ const user=auth.currentUser;
+ if(!user){$("payoutMessage").textContent="আবার Login করুন।";return;}
+ const btn=$("savePayout");btn.disabled=true;$("payoutMessage").textContent="সংরক্ষণ হচ্ছে...";
+ try{
+  await savePayoutPreference({
+   preference:$("payoutPreference").value,
+   method:$("payoutMethod").value,
+   accountNumber:$("payoutAccount").value.trim()
+  });
+  $("payoutMessage").textContent="আপনার পেমেন্ট পছন্দ সংরক্ষিত হয়েছে।";
+ }catch(e){$("payoutMessage").textContent="সংরক্ষণ হয়নি: "+(e.message||e.code);}
+ finally{btn.disabled=false;}
+});
+
 function line(label,value){const p=document.createElement("p");p.textContent=label+": "+value;return p}
 function render(){
  const completed=rides.filter(x=>x.data().status==="completed");
@@ -84,6 +118,13 @@ onAuthStateChanged(auth,async user=>{
  if(!user){location.replace("driver-login.html");return}
  uid=user.uid;
  try{
+  const payoutSnap=await getDoc(doc(db,"driverPayoutPreferences",uid));
+  if(payoutSnap.exists()){
+   const pref=payoutSnap.data();
+   $("payoutPreference").value=pref.preference||"daily_24h";
+   $("payoutMethod").value=pref.method||"bkash";
+   $("payoutAccount").value=pref.accountNumber||"";
+  }
   const profile=await getDoc(doc(db,"driverApplications",uid));
   if(!profile.exists()||profile.data().status!=="approved"){await signOut(auth);location.replace("driver-login.html");return}
   const d=profile.data();
