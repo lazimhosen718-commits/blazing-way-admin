@@ -63,10 +63,10 @@ exports.updateRideOperationsSettings = onCall(async (request) => {
     return value;
   };
   const settings = {
-    bikeBaseFare: money(numeric("bikeBaseFare", 0, 10000)),
-    bikePerKm: money(numeric("bikePerKm", 0, 1000)),
-    carBaseFare: money(numeric("carBaseFare", 0, 20000)),
-    carPerKm: money(numeric("carPerKm", 0, 2000)),
+    bikeBaseFare: money(numeric("bikeBaseFare", 0.01, 10000)),
+    bikePerKm: money(numeric("bikePerKm", 0.01, 1000)),
+    carBaseFare: money(numeric("carBaseFare", 0.01, 20000)),
+    carPerKm: money(numeric("carPerKm", 0.01, 2000)),
     minimumFare: money(numeric("minimumFare", 0, 10000)),
     requestTimeoutSeconds: Math.round(numeric("requestTimeoutSeconds", 10, 180)),
     driverSearchRadiusKm: Number(numeric("driverSearchRadiusKm", 1, 50).toFixed(1)),
@@ -390,15 +390,15 @@ exports.completeRideWithOtp = onCall(async (request) => {
     const vehicle = ride.vehicleType;
     const operations = operationsSnap.exists ? operationsSnap.data() : {};
     const baseFare = vehicle === "bike"
-      ? Number(operations.bikeBaseFare ?? 30)
-      : vehicle === "car" ? Number(operations.carBaseFare ?? 60) : null;
+      ? Number(operations.bikeBaseFare ?? 0)
+      : vehicle === "car" ? Number(operations.carBaseFare ?? 0) : null;
     const perKm = vehicle === "bike"
-      ? Number(operations.bikePerKm ?? 12)
-      : vehicle === "car" ? Number(operations.carPerKm ?? 20) : null;
-    if (baseFare === null || !Number.isFinite(baseFare) || !Number.isFinite(perKm)) {
+      ? Number(operations.bikePerKm ?? 0)
+      : vehicle === "car" ? Number(operations.carPerKm ?? 0) : null;
+    if (baseFare === null || !Number.isFinite(baseFare) || baseFare <= 0 || !Number.isFinite(perKm) || perKm <= 0) {
       throw new HttpsError("failed-precondition", "Ride ভাড়ার সেটিংস সঠিক নয়।");
     }
-    const minimumFare = Number(operations.minimumFare ?? 30);
+    const minimumFare = Number(operations.minimumFare ?? 0);
     const surgeMultiplier = operations.surgeEnabled === true ? Number(operations.surgeMultiplier ?? 1) : 1;
     if (!Number.isFinite(minimumFare) || minimumFare < 0 || !Number.isFinite(surgeMultiplier) || surgeMultiplier < 1 || surgeMultiplier > 5) {
       throw new HttpsError("failed-precondition", "Minimum Fare বা Surge সেটিংস সঠিক নয়।");
