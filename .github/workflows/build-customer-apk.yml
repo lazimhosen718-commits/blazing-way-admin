@@ -73,8 +73,12 @@ jobs:
             exit 0
           fi
           echo "available=true" >> "$GITHUB_OUTPUT"
-          echo "$KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/customer-release.p12"
+          # Remove whitespace and any accidental non-Base64 clipboard characters.
+          printf '%s' "$KEYSTORE_BASE64" | tr -cd 'A-Za-z0-9+/=' | base64 --decode > "$RUNNER_TEMP/customer-release.p12"
           test -s "$RUNNER_TEMP/customer-release.p12"
+          # Confirm this is a valid PKCS12 keystore before attempting the Android build.
+          openssl pkcs12 -in "$RUNNER_TEMP/customer-release.p12" -noout -passin env:KEYSTORE_PASSWORD
+          echo "Signing keystore decoded and validated."
 
       - name: Set up JDK
         if: steps.signing.outputs.available == 'true'
