@@ -809,6 +809,8 @@ function loadCustomerSupportInbox(){
    row.append(who,body,time,reply);box.appendChild(row);
   });
  },e=>{console.error("Customer Support Inbox query failed:",e);$("adminCustomerMessages").textContent="Inbox Error: "+(e.code||"unknown")+" — "+(e.message||"বিস্তারিত পাওয়া যায়নি");});
+}
+
 
 $("publishOfferBtn").addEventListener("click",async()=>{
  const title=$("newOfferTitle").value.trim(),description=$("newOfferDescription").value.trim();
