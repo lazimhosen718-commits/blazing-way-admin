@@ -50,6 +50,14 @@ jobs:
         working-directory: android-apk
         run: gradle --no-daemon clean assembleDebug
 
+      - name: Upload debug APK (unsigned)
+        uses: actions/upload-artifact@v4
+        with:
+          name: blazing-way-customer-v12-debug-unsigned
+          path: android-apk/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 14
+
   release:
     name: Build and publish signed release
     needs: validate
@@ -60,6 +68,7 @@ jobs:
 
       - name: Check signing secrets
         id: signing
+        continue-on-error: true
         env:
           KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
           KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
@@ -72,7 +81,7 @@ jobs:
             echo "Signed release skipped: configure all four Android signing repository secrets."
             exit 0
           fi
-          echo "available=true" >> "$GITHUB_OUTPUT"
+          echo "available=false" >> "$GITHUB_OUTPUT"
           # Normalize copied Base64 text and restore terminal padding before decoding.
           python3 - <<'PY'
           import base64, os, re
@@ -90,37 +99,38 @@ jobs:
           test -s "$RUNNER_TEMP/customer-release.p12"
           # Confirm this is a valid PKCS12 keystore before attempting the Android build.
           openssl pkcs12 -in "$RUNNER_TEMP/customer-release.p12" -noout -passin env:KEYSTORE_PASSWORD
+          echo "available=true" >> "$GITHUB_OUTPUT"
           echo "Signing keystore decoded and validated."
 
       - name: Set up JDK
-        if: steps.signing.outputs.available == 'true'
+        if: steps.signing.outcome == 'success' && steps.signing.outputs.available == 'true'
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
 
       - name: Set up Android SDK
-        if: steps.signing.outputs.available == 'true'
+        if: steps.signing.outcome == 'success' && steps.signing.outputs.available == 'true'
         uses: android-actions/setup-android@v3
         with:
           packages: platform-tools
 
       - name: Accept Android SDK licenses
-        if: steps.signing.outputs.available == 'true'
+        if: steps.signing.outcome == 'success' && steps.signing.outputs.available == 'true'
         run: yes | sdkmanager --licenses
 
       - name: Install Android platform
-        if: steps.signing.outputs.available == 'true'
+        if: steps.signing.outcome == 'success' && steps.signing.outputs.available == 'true'
         run: sdkmanager "platforms;android-35" "build-tools;35.0.0" "platform-tools"
 
       - name: Set up Gradle
-        if: steps.signing.outputs.available == 'true'
+        if: steps.signing.outcome == 'success' && steps.signing.outputs.available == 'true'
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
 
       - name: Build signed release APK
-        if: steps.signing.outputs.available == 'true'
+        if: steps.signing.outcome == 'success' && steps.signing.outputs.available == 'true'
         working-directory: android-apk
         env:
           ANDROID_KEYSTORE_PATH: ${{ runner.temp }}/customer-release.p12
@@ -130,7 +140,7 @@ jobs:
         run: gradle --no-daemon clean assembleRelease
 
       - name: Verify APK signature
-        if: steps.signing.outputs.available == 'true'
+        if: steps.signing.outcome == 'success' && steps.signing.outputs.available == 'true'
         run: |
           set -euo pipefail
           APK="android-apk/app/build/outputs/apk/release/app-release.apk"
@@ -138,7 +148,7 @@ jobs:
           apksigner verify --verbose --print-certs "$APK"
 
       - name: Publish signed APK release
-        if: steps.signing.outputs.available == 'true'
+        if: steps.signing.outcome == 'success' && steps.signing.outputs.available == 'true'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: customer-apk-v12.0-${{ github.run_number }}
