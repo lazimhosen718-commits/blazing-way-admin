@@ -117,13 +117,13 @@ button:disabled{opacity:.5;cursor:not-allowed}
 
 <div class="card" id="commissionSettings">
 <h3>Ride Commission Settings</h3>
-<p class="small">Bike ও Car-এর কমিশন আলাদাভাবে নির্ধারণ করুন। পরিবর্তন শুধু নতুন করে সম্পন্ন হওয়া Ride-এ কার্যকর হবে।</p>
+<p class="small">Bike ও Car উভয়ের Ride Commission কমপক্ষে ৫%। কমিশনের অর্ধেক Driver Incentive এবং অর্ধেক BLAZING-WAY-এর আয়। Customer Discount ২.৫% শুধু রিপোর্টে দেখাবে—গ্রাহককে দেওয়া বা গ্রাহকের কাছ থেকে নেওয়া হবে না।</p>
 <div class="grid">
- <div><label>Bike Commission (%)</label><input id="bikeCommissionRate" type="number" min="0" max="50" step="0.1" value="1"></div>
- <div><label>Car Commission (%)</label><input id="carCommissionRate" type="number" min="0" max="50" step="0.1" value="1"></div>
+ <div><label>Bike Commission (%)</label><input id="bikeCommissionRate" type="number" min="5" max="50" step="0.1" value="5"></div>
+ <div><label>Car Commission (%)</label><input id="carCommissionRate" type="number" min="5" max="50" step="0.1" value="5"></div>
 </div>
 <button id="saveCommissionRates" class="approveBtn">কমিশন সংরক্ষণ করুন</button>
-<p id="commissionSettingsMessage" class="small">বর্তমান হার: Bike ১% | Car ১%</p>
+<p id="commissionSettingsMessage" class="small">বর্তমান হার: Bike ৫% | Car ৫%</p>
 <p id="commissionInfo">লোড হচ্ছে...</p>
 </div>
 
@@ -390,7 +390,7 @@ function safeText(value){
 }
 
 function getRideCommissionRate(vehicleType){
- return Number(rideCommissionRates[vehicleType]??0.01);
+ return Number(rideCommissionRates[vehicleType]??0.05);
 }
 
 function loadRideCommissionSettings(){
@@ -398,12 +398,12 @@ function loadRideCommissionSettings(){
  stopCommissionSettings=onSnapshot(doc(db,"platformSettings","rideCommission"),snapshot=>{
   const rates=snapshot.exists()?snapshot.data():{};
   rideCommissionRates={
-   bike:Number.isFinite(Number(rates.bike))?Number(rates.bike):0.01,
-   car:Number.isFinite(Number(rates.car))?Number(rates.car):0.01
+   bike:Number.isFinite(Number(rates.bike))?Math.max(0.05,Number(rates.bike)):0.05,
+   car:Number.isFinite(Number(rates.car))?Math.max(0.05,Number(rates.car)):0.05
   };
   $("bikeCommissionRate").value=(rideCommissionRates.bike*100).toString();
   $("carCommissionRate").value=(rideCommissionRates.car*100).toString();
-  $("commissionSettingsMessage").textContent="বর্তমান হার: Bike "+(rideCommissionRates.bike*100)+"% | Car "+(rideCommissionRates.car*100)+"%";
+  $("commissionSettingsMessage").textContent="বর্তমান হার: Bike "+(rideCommissionRates.bike*100)+"% | Car "+(rideCommissionRates.car*100)+"% | ন্যূনতম ৫%";
   if(latestBookingDocs.length)renderRideBookings(latestBookingDocs);
   renderPaymentManagement();
  },error=>{
@@ -464,8 +464,8 @@ $("saveCommissionRates").onclick=async()=>{
  const bikePercent=Number($("bikeCommissionRate").value);
  const carPercent=Number($("carCommissionRate").value);
  const button=$("saveCommissionRates");
- if(!Number.isFinite(bikePercent)||!Number.isFinite(carPercent)||bikePercent<0||carPercent<0||bikePercent>50||carPercent>50){
-  $("commissionSettingsMessage").textContent="কমিশন ০% থেকে ৫০%-এর মধ্যে দিন।";return;
+ if(!Number.isFinite(bikePercent)||!Number.isFinite(carPercent)||bikePercent<5||carPercent<5||bikePercent>50||carPercent>50){
+  $("commissionSettingsMessage").textContent="Bike ও Car কমিশন ৫% থেকে ৫০%-এর মধ্যে দিন।";return;
  }
  button.disabled=true;
  $("commissionSettingsMessage").textContent="সংরক্ষণ হচ্ছে...";
@@ -1052,16 +1052,24 @@ function renderRideBookings(docs){
  $("bookingCount").textContent="মোট বুকিং: "+total+" | Pending: "+pending;
  $("rideCount").textContent="মোট বুকিং: "+total+" | Pending: "+pending;
 
- let commission=0;
+ let commission=0,customerDiscountReport=0,driverIncentive=0,platformNetIncome=0;
 
  completed.forEach(item=>{
   const d=item.data();
   commission+=Number(d.platformCommission??(Number(d.actualFare??d.estimatedFare??0)*getRideCommissionRate(d.vehicleType)));
+  if(d.commissionPolicyVersion==="commission-split-v1"){
+   customerDiscountReport+=Number(d.customerDiscountReport||0);
+   driverIncentive+=Number(d.driverIncentive||0);
+   platformNetIncome+=Number(d.platformNetIncome||0);
+  }
  });
 
  $("commissionInfo").textContent=
   "Completed Ride: "+completed.length+
-  " | মোট কমিশন: ৳"+money(commission);
+  " | মোট কমিশন: ৳"+money(commission)+
+  " | Customer Discount (শুধু রিপোর্ট): ৳"+money(customerDiscountReport)+
+  " | Driver Incentive: ৳"+money(driverIncentive)+
+  " | BLAZING-WAY আয়: ৳"+money(platformNetIncome);
 
  if(!total){
   $("rideBookings").textContent="এখনো কোনো Booking নেই।";
@@ -1122,8 +1130,15 @@ function renderRideBookings(docs){
    const amount=Number(d.platformCommission??(Number(d.actualFare??d.estimatedFare??0)*getRideCommissionRate(d.vehicleType)));
    const box=document.createElement("div");
    box.className="commissionBox";
-   box.textContent="এই Ride-এর কমিশন: ৳"+money(amount);
+   box.textContent="এই Ride-এর মোট কমিশন: ৳"+money(amount);
    card.appendChild(box);
+   if(d.commissionPolicyVersion==="commission-split-v1"){
+    card.append(
+     line("Customer Discount (শুধু রিপোর্ট; বাস্তবে দেওয়া/নেওয়া নয়)","৳"+money(d.customerDiscountReport||0)),
+     line("Driver Incentive","৳"+money(d.driverIncentive||0)),
+     line("BLAZING-WAY-এর নিট আয়","৳"+money(d.platformNetIncome||0))
+    );
+   }
   }
 
   if(d.status==="pending"){
@@ -1377,7 +1392,8 @@ function getDriverPaymentData(){
   }
 
   const fare=Number(d.actualFare??d.estimatedFare??0);
-  const driverEarnings=Number(d.driverEarnings??(fare*(1-getRideCommissionRate(d.vehicleType))));
+  const rate=getRideCommissionRate(d.vehicleType);
+  const driverEarnings=Number(d.driverEarnings??(fare*(1-rate)+(fare*rate*0.5)));
 
   drivers[d.driverId].earnings+=driverEarnings;
   drivers[d.driverId].rides++;
@@ -1468,7 +1484,7 @@ function renderPaymentManagement(){
     title,
     line("Driver ID",driver.id),
     line("Completed Ride",driver.rides),
-    line("মোট আয় (৯৯%)","৳"+money(driver.earnings)),
+    line("মোট Driver আয় (Incentive-সহ)","৳"+money(driver.earnings)),
     line("পরিশোধিত","৳"+money(driver.paid)),
     due
    );
