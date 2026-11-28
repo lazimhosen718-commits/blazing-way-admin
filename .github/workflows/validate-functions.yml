@@ -31,3 +31,5 @@ jobs:
           node-version: '20'
       - name: Check Cloud Functions syntax
         run: npm run lint
+      - name: Run ride settlement unit tests
+        run: npm test
