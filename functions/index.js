@@ -32,8 +32,8 @@ exports.updateRideCommissionRates = onCall(async (request) => {
   const actorUid = requireSuperAdmin(request);
   const bike = Number(request.data?.bike);
   const car = Number(request.data?.car);
-  if (!Number.isFinite(bike) || !Number.isFinite(car) || bike < 0 || car < 0 || bike > 0.5 || car > 0.5) {
-    throw new HttpsError("invalid-argument", "Bike ও Car কমিশন ০% থেকে ৫০%-এর মধ্যে দিন।");
+  if (!Number.isFinite(bike) || !Number.isFinite(car) || bike < 0.05 || car < 0.05 || bike > 0.5 || car > 0.5) {
+    throw new HttpsError("invalid-argument", "Bike ও Car কমিশন ৫% থেকে ৫০%-এর মধ্যে দিন।");
   }
   const rates = { bike: Math.round(bike * 10000) / 10000, car: Math.round(car * 10000) / 10000 };
   await db.collection("platformSettings").doc("rideCommission").set({
@@ -408,11 +408,11 @@ exports.completeRideWithOtp = onCall(async (request) => {
     const passengerRefund = money(Math.max(0, estimatedFare - actualFare));
     const configuredRates = settingsSnap.exists ? settingsSnap.data() : {};
     const savedCommissionRate = Number(configuredRates[vehicle] ?? 0.05);
-    if (!Number.isFinite(savedCommissionRate) || savedCommissionRate < 0.05 || savedCommissionRate > 0.5) {
-      throw new HttpsError("failed-precondition", "Ride কমিশন কমপক্ষে ৫% এবং সর্বোচ্চ ৫০% হতে হবে।");
+    if (!Number.isFinite(savedCommissionRate) || savedCommissionRate < 0 || savedCommissionRate > 0.5) {
+      throw new HttpsError("failed-precondition", "Ride কমিশন সেটিংস সঠিক নয়।");
     }
-    // Legacy 1% settings are upgraded logically to the new 5% minimum.
-    const commissionRate = savedCommissionRate;
+    // Legacy commission settings below 5% are treated as 5% under the new policy.
+    const commissionRate = Math.max(0.05, savedCommissionRate);
     const commission = money(actualFare * commissionRate);
     const driverIncentive = money(commission * 0.5);
     const customerDiscountReport = driverIncentive; // Report-only: no customer credit/debit.
