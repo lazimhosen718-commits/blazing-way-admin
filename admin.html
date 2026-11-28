@@ -129,13 +129,13 @@ button:disabled{opacity:.5;cursor:not-allowed}
 
 <div class="card" id="rideOperationsSettings">
 <h3>Ride Operations Settings — Super Admin</h3>
-<p class="small">এখানকার পরিবর্তন শুধু Super Admin করতে পারবেন। ভাড়া ও অপারেশনাল সীমা সংরক্ষিত হবে; GPS, SOS ও Auto-Dispatch-এর কার্যকর সংযোগ আলাদাভাবে সম্পন্ন করতে হবে।</p>
+<p class="small">এখানকার পরিবর্তন শুধু Super Admin করতে পারবেন। পুরোনো ডেমো ভাড়ার হার আর ডিফল্ট নয়—নতুন Bike/Car Base Fare ও প্রতি KM হার নির্ধারণ করে সংরক্ষণ না করা পর্যন্ত Passenger Booking-এ ভাড়া হিসাব বন্ধ থাকবে। GPS, SOS ও Auto-Dispatch-এর কার্যকর সংযোগ আলাদাভাবে যাচাই করতে হবে।</p>
 <div class="grid">
- <div><label>Bike Base Fare (৳)</label><input id="rideBikeBaseFare" type="number" min="0" max="10000" step="1" value="30"></div>
- <div><label>Bike প্রতি KM (৳)</label><input id="rideBikePerKm" type="number" min="0" max="1000" step="1" value="12"></div>
- <div><label>Car Base Fare (৳)</label><input id="rideCarBaseFare" type="number" min="0" max="20000" step="1" value="60"></div>
- <div><label>Car প্রতি KM (৳)</label><input id="rideCarPerKm" type="number" min="0" max="2000" step="1" value="20"></div>
- <div><label>Minimum Fare (৳)</label><input id="rideMinimumFare" type="number" min="0" max="10000" step="1" value="30"></div>
+ <div><label>Bike Base Fare (৳)</label><input id="rideBikeBaseFare" type="number" min="0" max="10000" step="1" value="0" placeholder="নতুন হার দিন"></div>
+ <div><label>Bike প্রতি KM (৳)</label><input id="rideBikePerKm" type="number" min="0" max="1000" step="1" value="0" placeholder="নতুন হার দিন"></div>
+ <div><label>Car Base Fare (৳)</label><input id="rideCarBaseFare" type="number" min="0" max="20000" step="1" value="0" placeholder="নতুন হার দিন"></div>
+ <div><label>Car প্রতি KM (৳)</label><input id="rideCarPerKm" type="number" min="0" max="2000" step="1" value="0" placeholder="নতুন হার দিন"></div>
+ <div><label>Minimum Fare (৳)</label><input id="rideMinimumFare" type="number" min="0" max="10000" step="1" value="0"></div>
  <div><label>Driver Request Timeout (সেকেন্ড)</label><input id="rideRequestTimeout" type="number" min="10" max="180" step="1" value="30"></div>
  <div><label>Driver Search Radius (KM)</label><input id="rideSearchRadius" type="number" min="1" max="50" step="0.5" value="5"></div>
  <div><label>Surge Multiplier</label><input id="rideSurgeMultiplier" type="number" min="1" max="5" step="0.1" value="1"></div>
@@ -416,11 +416,11 @@ function loadRideOperationsSettings(){
  if(stopRideOperationsSettings)stopRideOperationsSettings();
  stopRideOperationsSettings=onSnapshot(doc(db,"platformSettings","rideOperations"),snapshot=>{
   const s=snapshot.exists()?snapshot.data():{};
-  $("rideBikeBaseFare").value=s.bikeBaseFare??30;
-  $("rideBikePerKm").value=s.bikePerKm??12;
-  $("rideCarBaseFare").value=s.carBaseFare??60;
-  $("rideCarPerKm").value=s.carPerKm??20;
-  $("rideMinimumFare").value=s.minimumFare??30;
+  $("rideBikeBaseFare").value=s.bikeBaseFare??0;
+  $("rideBikePerKm").value=s.bikePerKm??0;
+  $("rideCarBaseFare").value=s.carBaseFare??0;
+  $("rideCarPerKm").value=s.carPerKm??0;
+  $("rideMinimumFare").value=s.minimumFare??0;
   $("rideRequestTimeout").value=s.requestTimeoutSeconds??30;
   $("rideSearchRadius").value=s.driverSearchRadiusKm??5;
   $("rideSurgeMultiplier").value=s.surgeMultiplier??1;
