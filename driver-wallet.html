@@ -29,11 +29,11 @@ button{width:100%;padding:13px;border:0;border-radius:8px;background:#123b70;col
   <div class="grid">
    <div class="summary">Completed Ride<strong id="rideCount">0</strong></div>
    <div class="summary">মোট ভাড়া<strong id="fare">৳0.00</strong></div>
-   <div class="summary">চালকের আয় (৯৯%)<strong class="balance" id="earned">৳0.00</strong></div>
+   <div class="summary">চালকের নিট আয় (৯৭.৫%)<strong class="balance" id="earned">৳0.00</strong></div>
    <div class="summary">পরিশোধিত<strong id="paid">৳0.00</strong></div>
    <div class="summary">বকেয়া<strong class="due" id="due">৳0.00</strong></div>
   </div>
-  <p class="small">প্রতি Completed Ride-এর ভাড়ার ৯৯% চালকের আয় হিসেবে হিসাব করা হয়। Admin-এর ১% কমিশন আলাদা। এই Wallet বর্তমানে Ride ও Admin Payment Record থেকে হিসাব দেখায়; এটি ব্যাংক/মোবাইল ব্যাংকিংয়ে সরাসরি টাকা পাঠায় না।</p>
+  <p class="small">নীতিমতে মোট কমিশন ৫%: চালক ইনসেনটিভ ২.৫% এবং BLAZING-WAY-এর রিপোর্টভিত্তিক আয় ২.৫%। তাই চালকের নিট আয় সাধারণত প্রকৃত ভাড়ার ৯৭.৫%। Customer Discount ২.৫% শুধু Admin Report-এ দেখায়—গ্রাহকের কাছ থেকে নেওয়া বা গ্রাহককে দেওয়া হয় না। এই Wallet সরাসরি ব্যাংক/মোবাইল ব্যাংকিংয়ে টাকা পাঠায় না।</p>
   <a class="button" href="driver-dashboard.html">Driver Dashboard-এ ফিরে যান</a>
   <p id="message" class="small"></p>
  </div>
@@ -123,7 +123,7 @@ function render(){
  if(!completed.length)rh.textContent="এখনো কোনো Completed Ride নেই।";
  [...completed].sort((a,b)=>(b.data().assignedAt?.toMillis?.()||0)-(a.data().assignedAt?.toMillis?.()||0)).forEach(x=>{
   const d=x.data(),card=document.createElement("div");card.className="item";
-  card.append(line("Booking ID",x.id),line("Pickup",d.pickup||"—"),line("Destination",d.destination||"—"),line("মোট ভাড়া",money(d.estimatedFare)),line("আপনার আয় (৯৯%)",money(Number(d.estimatedFare||0)*.99)));
+  card.append(line("Booking ID",x.id),line("Pickup",d.pickup||"—"),line("Destination",d.destination||"—"),line("চূড়ান্ত ভাড়া",money(d.actualFare??d.finalFare??d.estimatedFare)),line("আপনার নিট আয়",money(d.driverNet??(Number(d.actualFare??d.finalFare??d.estimatedFare??0)*.975).toFixed(2))));
   rh.append(card);
  });
  const ph=$("paymentHistory");ph.replaceChildren();
