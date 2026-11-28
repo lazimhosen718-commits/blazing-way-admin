@@ -353,7 +353,7 @@ exports.createRideCompletionOtp = onCall(async (request) => {
 /**
  * Driver completes an assigned ride using the passenger's OTP.
  * Unused distance fare is returned to the passenger wallet.
- * Platform commission is 1% of the actual fare.
+ * Platform commission is 5% of the actual fare; half is driver incentive and half is platform net income.
  */
 exports.completeRideWithOtp = onCall(async (request) => {
   const driverId = requireUser(request);
@@ -407,12 +407,17 @@ exports.completeRideWithOtp = onCall(async (request) => {
     const actualFare = money(Math.min(estimatedFare, calculatedActualFare));
     const passengerRefund = money(Math.max(0, estimatedFare - actualFare));
     const configuredRates = settingsSnap.exists ? settingsSnap.data() : {};
-    const commissionRate = Number(configuredRates[vehicle] ?? 0.01);
-    if (!Number.isFinite(commissionRate) || commissionRate < 0 || commissionRate > 0.5) {
-      throw new HttpsError("failed-precondition", "Ride কমিশন সেটিংস সঠিক নয়।");
+    const savedCommissionRate = Number(configuredRates[vehicle] ?? 0.05);
+    if (!Number.isFinite(savedCommissionRate) || savedCommissionRate < 0.05 || savedCommissionRate > 0.5) {
+      throw new HttpsError("failed-precondition", "Ride কমিশন কমপক্ষে ৫% এবং সর্বোচ্চ ৫০% হতে হবে।");
     }
+    // Legacy 1% settings are upgraded logically to the new 5% minimum.
+    const commissionRate = savedCommissionRate;
     const commission = money(actualFare * commissionRate);
-    const driverNet = money(actualFare - commission);
+    const driverIncentive = money(commission * 0.5);
+    const customerDiscountReport = driverIncentive; // Report-only: no customer credit/debit.
+    const platformNetIncome = money(commission - driverIncentive);
+    const driverNet = money(actualFare - commission + driverIncentive);
 
     const passengerWalletRef = db.collection("passengerWallets").doc(ride.passengerId);
     const driverWalletRef = db.collection("driverWallets").doc(driverId);
@@ -439,6 +444,12 @@ exports.completeRideWithOtp = onCall(async (request) => {
       passengerRefund,
       platformCommission: commission,
       platformCommissionRate: commissionRate,
+      customerDiscountReport,
+      customerDiscountReportRate: commissionRate * 0.5,
+      driverIncentive,
+      driverIncentiveRate: commissionRate * 0.5,
+      platformNetIncome,
+      commissionPolicyVersion: "commission-split-v1",
       driverEarnings: driverNet,
       completedAt: FieldValue.serverTimestamp(),
       completionOtpHash: FieldValue.delete(),
@@ -455,11 +466,20 @@ exports.completeRideWithOtp = onCall(async (request) => {
       passengerRefund,
       platformCommission: commission,
       platformCommissionRate: commissionRate,
+      customerDiscountReport,
+      customerDiscountReportRate: commissionRate * 0.5,
+      driverIncentive,
+      driverIncentiveRate: commissionRate * 0.5,
+      platformNetIncome,
+      commissionPolicyVersion: "commission-split-v1",
       driverEarnings: driverNet,
       createdAt: FieldValue.serverTimestamp()
     });
 
-    outcome = { actualFare, passengerRefund, commission, driverEarnings: driverNet };
+    outcome = {
+      actualFare, passengerRefund, commission, customerDiscountReport,
+      driverIncentive, platformNetIncome, driverEarnings: driverNet
+    };
   });
 
   return { success: true, ...outcome };
