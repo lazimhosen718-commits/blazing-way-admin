@@ -73,8 +73,20 @@ jobs:
             exit 0
           fi
           echo "available=true" >> "$GITHUB_OUTPUT"
-          # Remove whitespace and any accidental non-Base64 clipboard characters.
-          printf '%s' "$KEYSTORE_BASE64" | tr -cd 'A-Za-z0-9+/=' | base64 --decode > "$RUNNER_TEMP/customer-release.p12"
+          # Normalize copied Base64 text and restore terminal padding before decoding.
+          python3 - <<'PY'
+          import base64, os, re
+          raw = os.environ["KEYSTORE_BASE64"]
+          cleaned = re.sub(r"[^A-Za-z0-9+/]", "", raw).rstrip("=")
+          if not cleaned:
+              raise SystemExit("Keystore Base64 secret contains no decodable data.")
+          cleaned += "=" * (-len(cleaned) % 4)
+          data = base64.b64decode(cleaned)
+          if not data:
+              raise SystemExit("Decoded keystore is empty.")
+          with open(os.path.join(os.environ["RUNNER_TEMP"], "customer-release.p12"), "wb") as f:
+              f.write(data)
+          PY
           test -s "$RUNNER_TEMP/customer-release.p12"
           # Confirm this is a valid PKCS12 keystore before attempting the Android build.
           openssl pkcs12 -in "$RUNNER_TEMP/customer-release.p12" -noout -passin env:KEYSTORE_PASSWORD
